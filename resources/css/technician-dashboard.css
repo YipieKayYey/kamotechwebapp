@@ -1,0 +1,125 @@
+/* Technician Dashboard Styles */
+
+.technician-dashboard {
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/* Tabs */
+.tech-tabs {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  padding: 0 2rem;
+  display: flex;
+  overflow-x: auto;
+}
+.tech-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  color: var(--muted-foreground);
+  border: none;
+  background: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tech-tab:hover { color: var(--foreground); background: var(--muted); }
+.tech-tab.active { color: #083860; border-bottom-color: #083860; background: var(--background); }
+
+/* Dashboard */
+.tech-dashboard, .tech-bookings, .tech-commission, .tech-ratings, .tech-reports, .tech-settings { display: flex; flex-direction: column; gap: 1.5rem; }
+
+.tech-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.tech-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,.05);
+}
+.tech-stat-icon { width: 3rem; height: 3rem; border-radius: 9999px; display: grid; place-items: center; color: white; }
+.tech-stat-icon.blue { background: #2563eb; }
+.tech-stat-icon.green { background: #16a34a; }
+.tech-stat-icon.purple { background: #7c3aed; }
+.tech-stat-icon.amber { background: #f59e0b; }
+.tech-stat-info { display: flex; flex-direction: column; gap: .25rem; }
+.tech-stat-number { font-size: 1.75rem; font-weight: 700; }
+.tech-stat-label { font-size: .875rem; color: var(--muted-foreground); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+
+.tech-quick-actions { display: flex; gap: .75rem; flex-wrap: wrap; }
+.tech-btn { background: #083860; color: white; border: 1px solid #083860; padding: .6rem 1rem; border-radius: var(--radius); display: inline-flex; align-items: center; gap: .5rem; cursor: pointer; }
+.tech-btn:hover { background: #0C5F8F; border-color: #0C5F8F; }
+.tech-btn-outline { background: var(--card); color: var(--foreground); border: 1px solid var(--border); padding: .5rem .75rem; border-radius: var(--radius); display: inline-flex; align-items: center; gap: .5rem; cursor: pointer; }
+.tech-btn-outline.active { border-color: #083860; color: #083860; background: var(--muted); }
+
+.tech-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }
+.tech-list { display: flex; flex-direction: column; gap: .75rem; }
+.tech-list-item { display: flex; justify-content: space-between; gap: 1rem; padding: .75rem; background: var(--muted); border-radius: var(--radius); }
+.tech-list-title { font-weight: 600; }
+.tech-list-meta { display: flex; gap: .75rem; align-items: center; color: var(--muted-foreground); font-size: .9rem; flex-wrap: wrap; }
+.tech-list-side { display: flex; align-items: center; }
+
+.tech-status { padding: .25rem .6rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; text-transform: capitalize; }
+.tech-status.assigned { background: rgba(59,130,246,.1); color: #1d4ed8; }
+.tech-status.on_the_way { background: rgba(99,102,241,.1); color: #4f46e5; }
+.tech-status.in_progress { background: rgba(245,158,11,.1); color: #d97706; }
+.tech-status.completed { background: rgba(16,185,129,.1); color: #059669; }
+.tech-status.cancelled { background: rgba(239,68,68,.1); color: #dc2626; }
+.tech-earnings { font-weight: 700; color: #083860; }
+
+.tech-performance { display: grid; grid-template-columns: repeat(12, minmax(0,1fr)); gap: .5rem; align-items: end; height: 180px; padding: .5rem 0; }
+.tech-bar { display: flex; flex-direction: column; align-items: center; gap: .25rem; }
+.tech-bar-fill { width: 100%; background: #0ea5e9; border-radius: .25rem; }
+.tech-bar-fill.green { background: #10b981; }
+.tech-bar-fill.purple { background: #8b5cf6; }
+.tech-bar-label { font-size: .75rem; color: var(--muted-foreground); }
+
+.tech-header-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.tech-filters { display: flex; gap: .5rem; flex-wrap: wrap; }
+
+.tech-status-actions { display: flex; gap: .5rem; padding: 1rem 1.5rem; border-top: 1px solid var(--border); }
+
+/* Ratings */
+.tech-rating-summary { display: grid; grid-template-columns: 220px 1fr; gap: 1rem; align-items: start; }
+.tech-rating-score { display: flex; flex-direction: column; align-items: center; gap: .5rem; padding: 1rem; background: var(--muted); border-radius: var(--radius); }
+.tech-score { font-size: 2rem; font-weight: 800; color: #083860; }
+.tech-score-label { color: var(--muted-foreground); font-weight: 600; }
+.tech-rating-breakdown { display: flex; flex-direction: column; gap: .5rem; }
+.tech-rating-row { display: grid; grid-template-columns: 120px 1fr 40px; gap: .5rem; align-items: center; }
+.tech-stars { color: #f59e0b; }
+.tech-rating-bar { height: 8px; background: var(--muted); border-radius: 9999px; overflow: hidden; }
+.tech-rating-bar > div { height: 100%; background: #10b981; }
+.tech-rating-count { text-align: right; color: var(--muted-foreground); }
+
+/* Forms */
+.tech-settings .profile-fields .field-group label { font-weight: 500; color: var(--foreground); font-size: .9rem; }
+.tech-settings .profile-fields .profile-input { padding: .75rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); color: var(--foreground); }
+.tech-settings .profile-fields { display: flex; flex-direction: column; gap: 1rem; }
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .tech-rating-summary { grid-template-columns: 1fr; }
+}
+@media (max-width: 768px) {
+  .tech-tabs { padding: 0 1rem; }
+  .tech-tab { padding: .75rem 1rem; }
+  .tech-header-row { flex-direction: column; align-items: flex-start; }
+  .tech-quick-actions { flex-direction: column; }
+}
+@media (max-width: 480px) {
+  .tech-tab { padding: .5rem .75rem; font-size: .85rem; }
+}
+
+

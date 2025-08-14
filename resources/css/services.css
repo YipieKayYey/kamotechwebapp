@@ -1,0 +1,390 @@
+/* Services Pages Styles */
+
+.service-page {
+    min-height: 100vh;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+}
+
+/* Hero Section */
+.service-hero-section {
+    background: linear-gradient(135deg, #083860 0%, #0C5F8F 100%);
+    color: white;
+    padding: 6rem 0 4rem;
+    text-align: center;
+}
+
+.service-hero-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+}
+
+.service-hero-title {
+    font-size: 3.5rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    line-height: 1.2;
+}
+
+.service-hero-subtitle {
+    font-size: 1.25rem;
+    opacity: 0.9;
+    font-weight: 400;
+}
+
+/* Container */
+.service-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+}
+
+/* Service Content Section */
+.service-content-section {
+    padding: 3rem 0;
+    background: var(--background);
+}
+
+.service-content-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 2rem;
+    align-items: start;
+}
+
+/* Service Image */
+.service-image-container {
+    position: relative;
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: 0 10px 25px -3px rgb(0 0 0 / 0.1);
+}
+
+.service-image {
+    width: 100%;
+    height: 458px;
+    object-fit: cover;
+    border-radius: var(--radius);
+}
+
+/* Service Details */
+.service-details {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    height: fit-content;
+}
+
+/* Booking Details Container */
+.booking-details-container {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    height: fit-content;
+}
+
+.service-price {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.service-price-label {
+    font-weight: 500;
+    color: var(--muted-foreground);
+}
+
+.service-price-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #083860;
+}
+
+.service-duration {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.service-duration-label {
+    font-weight: 500;
+    color: var(--muted-foreground);
+}
+
+.service-duration-value {
+    color: var(--foreground);
+    font-weight: 500;
+}
+
+.service-book-btn {
+    width: 100%;
+    text-align: center;
+    background: #083860;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--radius);
+    font-weight: 500;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 0;
+    display: block;         /* makes margin auto work */
+    width: 100%;     /* shrink to content size */
+    margin: 0 auto;     
+}
+
+.service-book-btn:hover {
+    background: #0C5F8F;
+    transform: translateY(-1px);
+}
+
+/* Service Info Section */
+.service-info-section {
+    padding: 5rem 0;
+    background: #f8fafc;
+}
+
+.service-info-content {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.service-main-question {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #083860;
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.service-description {
+    font-size: 1.125rem;
+    color: var(--muted-foreground);
+    line-height: 1.8;
+    margin-bottom: 3rem;
+    text-align: center;
+}
+
+/* What's Included Section */
+.service-included-section {
+    margin-bottom: 3rem;
+}
+
+.service-section-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #083860;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.service-section-icon {
+    color: #083860;
+}
+
+.service-included-text {
+    font-size: 1rem;
+    color: var(--muted-foreground);
+    line-height: 1.7;
+}
+
+/* Benefits Section */
+.service-benefits-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.service-benefits-text {
+    font-size: 1rem;
+    color: var(--muted-foreground);
+    line-height: 1.7;
+}
+
+/* Other Services Section */
+.service-other-section {
+    padding: 3rem 0;
+    background: var(--background);
+}
+
+/* Compact Other Services for Service Pages */
+.service-other-services-compact {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+}
+
+.service-other-services-compact h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #083860;
+    margin-bottom: 0.75rem;
+    text-align: center;
+}
+
+.service-other-grid-compact {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+}
+
+.service-other-title {
+    font-size: 2rem;
+    font-weight: 600;
+    color: #083860;
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.service-other-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+}
+
+.service-other-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    text-align: center;
+    transition: all 0.2s;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+}
+
+.service-other-item-compact {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem 0.5rem;
+    text-align: center;
+    transition: all 0.2s;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.service-other-item:hover,
+.service-other-item-compact:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px -3px rgb(0 0 0 / 0.1);
+    border-color: #083860;
+}
+
+.service-other-item-icon {
+    color: #083860;
+    margin-bottom: 1rem;
+}
+
+.service-other-item-name {
+    font-weight: 500;
+    color: #083860;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .service-hero-title {
+        font-size: 2.5rem;
+    }
+    
+    .service-content-grid {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+    
+    .service-image {
+        height: 300px;
+    }
+    
+    .service-container {
+        padding: 0 1rem;
+    }
+    
+    .service-hero-container {
+        padding: 0 1rem;
+    }
+    
+    .service-other-grid {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.75rem;
+    }
+    
+    .service-other-grid-compact {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .service-hero-title {
+        font-size: 2rem;
+    }
+    
+    .service-hero-subtitle {
+        font-size: 1rem;
+    }
+    
+    .service-details {
+        padding: 1.5rem;
+    }
+    
+    .service-benefits-section {
+        padding: 1.5rem;
+    }
+    
+    .service-other-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+    
+    .service-other-grid-compact {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.375rem;
+    }
+    
+    .service-other-item-compact {
+        padding: 0.5rem 0.25rem;
+        font-size: 0.75rem;
+        gap: 0.25rem;
+    }
+}
+
+/* Dark Mode Support */
+.dark .service-page {
+    background: var(--background);
+    color: var(--foreground);
+}
+
+.dark .service-info-section {
+    background: rgb(15 23 42);
+}
+
+.dark .service-other-item:hover {
+    background: rgb(30 41 59);
+    border-color: #0C5F8F;
+}

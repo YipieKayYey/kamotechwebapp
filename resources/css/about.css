@@ -1,0 +1,418 @@
+/* About Us Page Styles */
+
+.about-page {
+    min-height: 100vh;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+}
+
+/* Hero Section */
+.about-hero-section {
+    background: linear-gradient(135deg, #083860 0%, #0C5F8F 100%);
+    color: white;
+    padding: 6rem 0 4rem;
+    text-align: center;
+}
+
+.about-hero-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+}
+
+.about-hero-title {
+    font-size: 3.5rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    line-height: 1.2;
+}
+
+.about-hero-subtitle {
+    font-size: 1.25rem;
+    opacity: 0.9;
+    font-weight: 400;
+}
+
+/* Container */
+.about-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+}
+
+.about-content-wrapper {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+/* Section Headers */
+.about-section-header {
+    text-align: center;
+    margin-bottom: 3rem;
+    color: #083860;
+}
+
+.about-section-title {
+    font-size: 2.5rem;
+    font-weight: 600;
+    color: #083860;
+    margin-bottom: 1rem;
+}
+
+.about-section-subtitle {
+    font-size: 1.125rem;
+    color: var(--muted-foreground);
+    margin-top: 1rem;
+}
+
+.about-title-underline {
+    width: 80px;
+    height: 4px;
+    background: #083860;
+    margin: 0 auto;
+    border-radius: 2px;
+}
+
+/* What is Kamotech Section */
+.about-what-section {
+    padding: 5rem 0;
+    background: var(--background);
+}
+
+.about-kamotech-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 3rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.about-company-name h3 {
+    font-size: 1.875rem;
+    font-weight: 600;
+    color: #1f2937;
+    text-align: center;
+    margin-bottom: 2rem;
+    letter-spacing: 0.025em;
+}
+
+.about-story p {
+    font-size: 1.125rem;
+    line-height: 1.7;
+    color: var(--foreground);
+    margin-bottom: 1.5rem;
+    text-align: justify;
+}
+
+.about-establishment {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-top: 2.5rem;
+    flex-wrap: wrap;
+}
+
+.about-establishment-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted-foreground);
+    font-weight: 500;
+}
+
+.about-establishment-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: #083860;
+}
+
+/* Services Section */
+.about-services-section {
+    padding: 5rem 0;
+    background: var(--muted);
+}
+
+.about-services-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+}
+
+.about-service-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    color: var(--foreground);
+    transition: all 0.2s ease;
+}
+
+.about-service-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
+}
+
+.about-service-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: #083860;
+    flex-shrink: 0;
+}
+
+/* Team Section */
+.about-team-section {
+    padding: 5rem 0;
+    background: var(--background);
+}
+
+.about-team-content {
+    text-align: center;
+}
+
+.about-team-stats {
+    display: flex;
+    justify-content: center;
+    gap: 4rem;
+    margin-bottom: 2.5rem;
+    flex-wrap: wrap;
+}
+
+.about-team-stat {
+    text-align: center;
+    padding: 2rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    min-width: 200px;
+}
+
+.about-team-number {
+    font-size: 3rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 0.5rem;
+}
+
+.about-team-label {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 0.25rem;
+}
+
+.about-team-note {
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+}
+
+.about-team-message {
+    background: var(--accent);
+    padding: 2rem;
+    border-radius: var(--radius);
+    border-left: 4px solid #083860;
+}
+
+.about-team-message p {
+    font-size: 1.125rem;
+    font-style: italic;
+    color: var(--accent-foreground);
+    margin: 0;
+}
+
+/* Why Choose Section */
+.about-why-section {
+    padding: 5rem 0;
+    background: var(--muted);
+}
+
+.about-reasons-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-bottom: 3rem;
+}
+
+.about-reason-card {
+    background: var(--card);
+    padding: 2rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.about-reason-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgb(0 0 0 / 0.15);
+}
+
+.about-reason-icon {
+    width: 3rem;
+    height: 3rem;
+    color: #083860;
+    margin-bottom: 1rem;
+}
+
+.about-reason-card h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 0.75rem;
+}
+
+.about-reason-card p {
+    color: var(--muted-foreground);
+    line-height: 1.6;
+}
+
+.about-values-list {
+    background: var(--card);
+    padding: 2rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+
+.about-values-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.about-values-list li {
+    padding: 0.75rem 0;
+    color: var(--foreground);
+    font-size: 1.125rem;
+    position: relative;
+    padding-left: 2rem;
+}
+
+.about-values-list li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    color: #083860;
+    font-weight: bold;
+    font-size: 1.25rem;
+}
+
+/* Mission Section */
+.about-mission-section {
+    padding: 5rem 0;
+    background: linear-gradient(135deg, #083860 0%, #0C5F8F 100%);
+    color: white;
+}
+
+.about-mission-content {
+    text-align: center;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.about-mission-title {
+    font-size: 2.5rem;
+    font-weight: 600;
+    margin-bottom: 2rem;
+}
+
+.about-mission-text p {
+    font-size: 1.25rem;
+    line-height: 1.7;
+    margin: 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .about-hero-title {
+        font-size: 2.5rem;
+    }
+    
+    .about-hero-subtitle {
+        font-size: 1.125rem;
+    }
+    
+    .about-section-title {
+        font-size: 2rem;
+    }
+    
+    .about-kamotech-card {
+        padding: 2rem;
+    }
+    
+    .about-establishment {
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .about-services-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .about-team-stats {
+        flex-direction: column;
+        gap: 2rem;
+    }
+    
+    .about-reasons-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .about-mission-title {
+        font-size: 2rem;
+    }
+    
+    .about-mission-text p {
+        font-size: 1.125rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .about-container {
+        padding: 0 1rem;
+    }
+    
+    .about-hero-container {
+        padding: 0 1rem;
+    }
+    
+    .about-hero-title {
+        font-size: 2rem;
+    }
+    
+    .about-kamotech-card {
+        padding: 1.5rem;
+    }
+    
+    .about-team-stat {
+        padding: 1.5rem;
+        min-width: auto;
+    }
+    
+    .about-reason-card {
+        padding: 1.5rem;
+    }
+}
+
+/* Dark mode specific adjustments */
+.dark .about-hero-section {
+    background: linear-gradient(135deg, #0C538F 0%, #083860 100%);
+}
+
+.dark .about-kamotech-card,
+.dark .about-service-item,
+.dark .about-team-stat,
+.dark .about-reason-card,
+.dark .about-values-list {
+    box-shadow: 0 4px 6px -1px rgb(255 255 255 / 0.05);
+}
+
+.dark .about-service-item:hover,
+.dark .about-reason-card:hover {
+    box-shadow: 0 8px 25px rgb(255 255 255 / 0.1);
+}
