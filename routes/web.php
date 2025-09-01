@@ -48,9 +48,54 @@ Route::get('/services/relocation', function () {
     return Inertia::render('services/relocation');
 })->name('services.relocation');
 
-Route::get('/booking', function () {
-    return Inertia::render('booking');
-})->name('booking');
+// Booking Routes - New Dynamic Implementation
+Route::get('/booking', [App\Http\Controllers\BookingController::class, 'create'])->name('booking');
+Route::post('/booking', [App\Http\Controllers\BookingController::class, 'store'])->name('booking.store');
+
+// AJAX endpoints for real-time booking features
+Route::get('/api/booking/availability', [App\Http\Controllers\BookingController::class, 'checkAvailability'])->name('booking.availability');
+Route::get('/api/booking/technicians', [App\Http\Controllers\BookingController::class, 'getTechnicianRanking'])->name('booking.technicians');
+Route::get('/api/booking/pricing', [App\Http\Controllers\BookingController::class, 'calculatePricing'])->name('booking.pricing');
+
+// Customer API Routes (moved from api.php for session access)
+Route::middleware(['auth', 'customer'])->group(function () {
+    // Customer Dashboard
+    Route::get('/api/customer/dashboard', [App\Http\Controllers\CustomerController::class, 'getDashboardData']);
+    Route::get('/api/customer/bookings', [App\Http\Controllers\CustomerController::class, 'getBookingHistory']);
+    Route::get('/api/customer/bookings/{bookingId}', [App\Http\Controllers\CustomerController::class, 'getBookingDetails']);
+    Route::post('/api/bookings/{booking}/request-cancellation', [App\Http\Controllers\BookingController::class, 'requestCancellation']);
+    
+    // Notifications
+    Route::get('/api/notifications', [App\Http\Controllers\NotificationController::class, 'getNotifications']);
+    Route::get('/api/notifications/unread-count', [App\Http\Controllers\NotificationController::class, 'getUnreadCount']);
+    Route::get('/api/notifications/stats', [App\Http\Controllers\NotificationController::class, 'getNotificationStats']);
+    Route::post('/api/notifications/{notificationId}/mark-read', [App\Http\Controllers\NotificationController::class, 'markAsRead']);
+    Route::post('/api/notifications/mark-all-read', [App\Http\Controllers\NotificationController::class, 'markAllAsRead']);
+    Route::delete('/api/notifications/{notificationId}', [App\Http\Controllers\NotificationController::class, 'deleteNotification']);
+    
+    // Rating & Reviews
+    Route::get('/api/review-categories', [App\Http\Controllers\RatingReviewController::class, 'getReviewCategories']);
+    Route::get('/api/bookings/{bookingId}/review-form', [App\Http\Controllers\RatingReviewController::class, 'getBookingForReview']);
+    Route::post('/api/bookings/{bookingId}/review', [App\Http\Controllers\RatingReviewController::class, 'submitReview']);
+    Route::get('/api/customer/reviews', [App\Http\Controllers\RatingReviewController::class, 'getCustomerReviews']);
+    Route::get('/api/reviews/{reviewId}', [App\Http\Controllers\RatingReviewController::class, 'getReviewDetails']);
+    
+    // Internal notification creation (for admin/system use)
+    Route::post('/api/notifications', [App\Http\Controllers\NotificationController::class, 'createNotification']);
+});
+
+// Debug authentication endpoint
+Route::middleware(['auth'])->get('/api/debug-auth', function () {
+    $user = auth()->user();
+    return response()->json([
+        'authenticated' => auth()->check(),
+        'user_id' => $user ? $user->id : null,
+        'user_name' => $user ? $user->name : null,
+        'user_role' => $user ? $user->role : null,
+        'session_id' => session()->getId(),
+        'has_session' => session()->has('login_web_' . sha1('web')),
+    ]);
+});
 
 // Removed address autocomplete functionality
 

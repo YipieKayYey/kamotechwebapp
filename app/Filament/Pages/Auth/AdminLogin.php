@@ -72,7 +72,7 @@ class AdminLogin extends BaseLogin
             // Show specific error message based on role
             $roleMessage = match($user->role) {
                 'customer' => 'ACCESS DENIED.',
-                'technician' => 'ACCESS DENIED.',
+                'technician' => 'ACCESS DENIED. Use technician login.',
                 default => 'ACCESS DENIED.',
             };
 

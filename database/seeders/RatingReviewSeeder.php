@@ -2,13 +2,12 @@
 
 namespace Database\Seeders;
 
+use App\Models\Booking;
+use App\Models\CategoryScore;
 use App\Models\RatingReview;
 use App\Models\ReviewCategory;
-use App\Models\CategoryScore;
-use App\Models\Booking;
 use App\Models\Technician;
 use Illuminate\Database\Seeder;
-use Carbon\Carbon;
 
 class RatingReviewSeeder extends Seeder
 {
@@ -21,12 +20,13 @@ class RatingReviewSeeder extends Seeder
         $completedBookings = Booking::where('status', 'completed')
             ->with(['customer', 'technician.user', 'service'])
             ->get();
-            
+
         // Get review categories
         $categories = ReviewCategory::getActiveOrdered();
-        
+
         if ($categories->isEmpty()) {
             echo "❌ No review categories found. Please run ReviewCategorySeeder first.\n";
+
             return;
         }
 
@@ -35,11 +35,18 @@ class RatingReviewSeeder extends Seeder
 
         $reviewCount = 0;
         foreach ($completedBookings as $booking) {
+            // Skip bookings without assigned technicians
+            if (! $booking->technician_id) {
+                echo "  ⚠️  Skipping booking {$booking->booking_number} - no technician assigned\n";
+
+                continue;
+            }
+
             // Not all customers leave reviews (about 75% review rate)
             if (rand(1, 100) <= 75) {
                 $technicianId = $booking->technician_id;
                 $serviceName = $booking->service->name;
-                
+
                 // Create the main review record
                 $review = RatingReview::create([
                     'booking_id' => $booking->id,
@@ -52,32 +59,32 @@ class RatingReviewSeeder extends Seeder
                     'created_at' => $booking->updated_at->addHours(rand(2, 48)),
                     'updated_at' => $booking->updated_at->addHours(rand(2, 48)),
                 ]);
-                
+
                 // Create category scores based on technician expertise
                 $categoryScores = [];
                 foreach ($categories as $category) {
                     $score = $this->generateCategoryScore($technicianId, $serviceName, $category->name);
                     $categoryScores[] = $score;
-                    
+
                     CategoryScore::create([
                         'review_id' => $review->id,
                         'category_id' => $category->id,
                         'score' => $score,
                     ]);
                 }
-                
+
                 // Calculate overall rating (this will be done automatically by model events)
                 $review->refresh();
-                
+
                 // Generate review text based on overall rating
                 $review->update([
                     'review' => $this->generateReviewText($review->overall_rating, $booking),
                 ]);
-                
+
                 $reviewCount++;
             }
         }
-        
+
         echo "✅ Created {$reviewCount} reviews with category-based ratings\n";
     }
 
@@ -96,7 +103,7 @@ class RatingReviewSeeder extends Seeder
                     'Cleanliness' => 4.8,
                     'Attitude' => 4.2,
                     'Tools' => 3.9,
-                ]
+                ],
             ],
             2 => [ // Maria Garcia - Installation Expert
                 'strengths' => ['Work Quality', 'Tools'],
@@ -107,7 +114,7 @@ class RatingReviewSeeder extends Seeder
                     'Cleanliness' => 4.3,
                     'Attitude' => 4.4,
                     'Tools' => 4.8,
-                ]
+                ],
             ],
             3 => [ // Jose Cruz - Repair Specialist
                 'strengths' => ['Work Quality', 'Tools'],
@@ -118,7 +125,7 @@ class RatingReviewSeeder extends Seeder
                     'Cleanliness' => 3.8,
                     'Attitude' => 3.9,
                     'Tools' => 4.7,
-                ]
+                ],
             ],
             4 => [ // Ana Reyes - All-rounder Expert
                 'strengths' => ['Work Quality', 'Attitude', 'Punctuality'],
@@ -129,7 +136,7 @@ class RatingReviewSeeder extends Seeder
                     'Cleanliness' => 4.6,
                     'Attitude' => 4.9,
                     'Tools' => 4.5,
-                ]
+                ],
             ],
             5 => [ // Carlos - Chemical/Freon Specialist
                 'strengths' => ['Tools', 'Work Quality'],
@@ -140,7 +147,7 @@ class RatingReviewSeeder extends Seeder
                     'Cleanliness' => 4.2,
                     'Attitude' => 4.3,
                     'Tools' => 4.6,
-                ]
+                ],
             ],
         ];
     }
@@ -152,24 +159,24 @@ class RatingReviewSeeder extends Seeder
     {
         $profiles = $this->getTechnicianProfiles();
         $profile = $profiles[$technicianId] ?? null;
-        
-        if (!$profile) {
+
+        if (! $profile) {
             return rand(3, 5); // Default random score
         }
-        
+
         $baseRating = $profile['base_ratings'][$categoryName] ?? 4.0;
-        
+
         // Adjust based on service type and technician specialization
         $serviceAdjustment = $this->getServiceAdjustment($technicianId, $serviceName, $categoryName);
         $adjustedRating = $baseRating + $serviceAdjustment;
-        
+
         // Convert to 1-5 integer score with some randomness
         $targetScore = max(1, min(5, round($adjustedRating)));
-        
+
         // Add some variation around the target
         $variation = rand(-1, 1) * 0.3;
         $finalScore = max(1, min(5, round($adjustedRating + $variation)));
-        
+
         return (int) $finalScore;
     }
 
@@ -209,7 +216,7 @@ class RatingReviewSeeder extends Seeder
                 'Repiping Service' => ['Work Quality' => 0.3, 'Tools' => 0.3],
             ],
         ];
-        
+
         return $adjustments[$technicianId][$serviceName][$categoryName] ?? 0;
     }
 
@@ -232,20 +239,21 @@ class RatingReviewSeeder extends Seeder
             ],
             3 => [
                 "Service was okay. {$technicianName} did the job but could have been more thorough.",
-                "Average service. The job was done but nothing exceptional. AC is working though.",
+                'Average service. The job was done but nothing exceptional. AC is working though.',
                 "Decent work by {$technicianName}. Service was completed but took longer than expected.",
             ],
             2 => [
                 "Service was below expectations. {$technicianName} did the work but seemed rushed.",
-                "Not very satisfied. The job was done but not very thoroughly. Had some issues after.",
+                'Not very satisfied. The job was done but not very thoroughly. Had some issues after.',
             ],
             1 => [
                 "Very disappointed with the service. Had to call them back to fix issues that weren't resolved.",
-                "Poor service. The technician seemed unprepared and left the job incomplete.",
+                'Poor service. The technician seemed unprepared and left the job incomplete.',
             ],
         ];
 
         $ratingReviews = $reviews[$rating] ?? $reviews[3];
+
         return $ratingReviews[array_rand($ratingReviews)];
     }
 }

@@ -11,23 +11,23 @@ use Illuminate\Support\Facades\Log;
 /**
  * TechnicianRankingService for KAMOTECH
  * 
- * Implements the UPDATED GREEDY ALGORITHM for optimal technician selection.
+ * Implements PURE SERVICE-RATING ALGORITHM for optimal technician selection.
  * This is the core intelligence that makes KAMOTECH smart.
  * 
- * UPDATED GREEDY ALGORITHM FORMULA (No GPS/Proximity):
- * SCORE = (ServiceRating × 70%) + (Availability × 30%)
+ * PURE SERVICE-RATING ALGORITHM:
+ * SCORE = ServiceRating × 100%
  * 
- * The algorithm focuses on service quality and technician availability,
- * ensuring optimal customer experience without geographic constraints.
+ * The algorithm focuses purely on service expertise for the selected service,
+ * ensuring customers always get the most qualified technician.
  */
 class TechnicianRankingService
 {
     private TechnicianAvailabilityService $availabilityService;
 
-    // Updated Greedy Algorithm Weights (must sum to 1.0)
+    // Pure Service-Rating Algorithm Weights
     private const WEIGHTS = [
-        'service_rating' => 0.70,  // 70% - How good at this specific service
-        'availability' => 0.30,    // 30% - How available (workload)
+        'service_rating' => 1.00,  // 100% - Pure service expertise
+        'availability' => 0.00,    // 0% - Removed for simplicity
     ];
 
     public function __construct(TechnicianAvailabilityService $availabilityService)
@@ -36,10 +36,10 @@ class TechnicianRankingService
     }
 
     /**
-     * Get ranked technicians for a specific service using UPDATED GREEDY ALGORITHM
+     * Get ranked technicians for a specific service using PURE SERVICE-RATING ALGORITHM
      * 
-     * This is the main method that implements our greedy optimization.
-     * It returns technicians ranked by their greedy score for the specific service.
+     * This is the main method that implements our service-focused optimization.
+     * It returns technicians ranked purely by their expertise for the specific service.
      * 
      * @param int $serviceId Service ID the customer wants
      * @param string $date Booking date (Y-m-d)
@@ -106,7 +106,7 @@ class TechnicianRankingService
     }
 
     /**
-     * Get the BEST technician using updated greedy algorithm (auto-assignment)
+     * Get the BEST technician using pure service-rating algorithm (auto-assignment)
      * 
      * @param int $serviceId Service ID
      * @param string $date Booking date
@@ -130,7 +130,7 @@ class TechnicianRankingService
         $bestTechnician = $rankedTechnicians->first();
 
         if ($bestTechnician) {
-            Log::info("Greedy algorithm selected technician", [
+            Log::info("Service-rating algorithm selected technician", [
                 'technician_id' => $bestTechnician->id,
                 'technician_name' => $bestTechnician->user->name,
                 'service_id' => $serviceId,
@@ -143,7 +143,7 @@ class TechnicianRankingService
     }
 
     /**
-     * Calculate Service Rating Score (70% weight)
+     * Calculate Service Rating Score (100% weight)
      * 
      * This score represents how good the technician is at the specific service.
      * Uses service-specific overall_rating (calculated from category scores).
@@ -176,7 +176,7 @@ class TechnicianRankingService
 
 
     /**
-     * Calculate Availability Score (30% weight)
+     * Calculate Availability Score (0% weight - kept for compatibility)
      * 
      * Technicians with fewer current jobs get higher scores for better work-life balance.
      * 

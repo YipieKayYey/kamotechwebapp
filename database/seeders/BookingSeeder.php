@@ -2,16 +2,15 @@
 
 namespace Database\Seeders;
 
+use App\Models\AirconType;
 use App\Models\Booking;
-use App\Models\User;
 use App\Models\Service;
-
+use App\Models\ServicePricing;
 use App\Models\Technician;
 use App\Models\Timeslot;
-use App\Models\AirconType;
-use App\Models\ServicePricing;
-use Illuminate\Database\Seeder;
+use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Seeder;
 
 class BookingSeeder extends Seeder
 {
@@ -29,7 +28,7 @@ class BookingSeeder extends Seeder
         $airconTypes = AirconType::all();
         $adminUser = User::where('role', 'admin')->first();
 
-        if ($customers->isEmpty() || $services->isEmpty() || 
+        if ($customers->isEmpty() || $services->isEmpty() ||
             $technicians->isEmpty() || $timeslots->isEmpty() || $airconTypes->isEmpty()) {
             throw new \Exception('Missing required data. Make sure Users, Services, Technicians, Timeslots, and AirconTypes are seeded first.');
         }
@@ -40,23 +39,28 @@ class BookingSeeder extends Seeder
 
         echo "- {$technicians->count()} technicians\n";
         echo "- {$timeslots->count()} timeslots\n";
-        echo "- {$airconTypes->count()} aircon types\n\n";
+        echo "- {$airconTypes->count()} aircon types\n";
+        echo "\n🎯 Booking Distribution for Algorithm Testing:\n";
+        echo "- Recent bookings: 15 (testing current algorithm)\n";
+        echo "- Historical bookings: 50 (rating/review data)\n";
+        echo "- Mixed statuses: pending, completed, in-progress\n";
+        echo "- Technician specialization-based assignments\n\n";
 
         $bookings = [];
-        
+
         // Create diverse booking scenarios for testing
-        
+
         // 1. Recent single-day bookings (15 bookings, last 2 weeks)
         for ($i = 1; $i <= 12; $i++) {
             $bookings[] = $this->createSingleDayBooking($i, $customers, $services, $technicians, $timeslots, $airconTypes, $adminUser, 'recent');
         }
-        
+
         // 2. Multi-day bookings for testing (3 bookings, recent)
         for ($i = 13; $i <= 15; $i++) {
             $bookings[] = $this->createMultiDayBooking($i, $customers, $services, $technicians, $timeslots, $airconTypes, $adminUser, 'recent');
         }
-        
-        // 3. Historical bookings (50 bookings, past 6 months) 
+
+        // 3. Historical bookings (50 bookings, past 6 months)
         for ($i = 16; $i <= 65; $i++) {
             if (rand(1, 10) <= 8) { // 80% single-day
                 $bookings[] = $this->createSingleDayBooking($i, $customers, $services, $technicians, $timeslots, $airconTypes, $adminUser, 'historical');
@@ -66,14 +70,14 @@ class BookingSeeder extends Seeder
         }
 
         // Insert all bookings
-        echo "Creating " . count($bookings) . " enhanced bookings...\n";
-        
+        echo 'Creating '.count($bookings)." enhanced bookings...\n";
+
         foreach ($bookings as $booking) {
             Booking::create($booking);
         }
-        
-        echo "✅ Successfully created " . count($bookings) . " bookings!\n";
-        echo "📋 Booking range: KMT-000001 to KMT-" . str_pad(count($bookings), 6, '0', STR_PAD_LEFT) . "\n";
+
+        echo '✅ Successfully created '.count($bookings)." bookings!\n";
+        echo '📋 Booking range: KMT-000001 to KMT-'.str_pad(count($bookings), 6, '0', STR_PAD_LEFT)."\n";
         echo "🏠 Single-day bookings: ~80%\n";
         echo "🏢 Multi-day bookings: ~20%\n";
         echo "🔧 AC units range: 1-10 per booking\n";
@@ -84,31 +88,31 @@ class BookingSeeder extends Seeder
     {
         $customer = $customers->random();
         $service = $services->random();
-        
+
         // Assign technician based on service expertise (weighted selection)
         $technician = $this->selectTechnicianForService($service->name, $technicians);
-        
+
         $timeslot = $timeslots->random();
         $airconType = $airconTypes->random();
-        
+
         // Number of AC units (mostly 1-3 for residential)
         $numberOfUnits = $this->getRealisticUnitCount();
-        
+
         // Calculate duration and pricing
         $durationData = $this->calculateServiceDuration($service, $numberOfUnits);
         $pricingData = $this->calculatePricing($service, $airconType, $numberOfUnits);
-        
+
         // Date based on period
-        $scheduledDate = $period === 'recent' 
+        $scheduledDate = $period === 'recent'
             ? Carbon::now()->subDays(rand(1, 14))
             : Carbon::now()->subDays(rand(15, 180));
-            
+
         $status = $period === 'recent'
             ? $this->getRecentBookingStatus($scheduledDate)
             : $this->getHistoricalBookingStatus();
 
         return [
-            'booking_number' => 'KMT-' . str_pad($index, 6, '0', STR_PAD_LEFT),
+            'booking_number' => 'KMT-'.str_pad($index, 6, '0', STR_PAD_LEFT),
             'customer_id' => $customer->id,
             'service_id' => $service->id,
             'aircon_type_id' => $airconType->id,
@@ -122,13 +126,13 @@ class BookingSeeder extends Seeder
             'estimated_days' => 1,
             'status' => $status,
             'total_amount' => $pricingData['total_amount'],
-            'payment_status' => $status === 'completed' ? 'paid' : ($status === 'cancelled' ? 'refunded' : 'pending'),
-            'customer_address' => $customer->address ?? $customer->name . ' Address',
+            'payment_status' => $status === 'completed' ? 'paid' : ($status === 'cancelled' ? 'unpaid' : 'pending'),
+            'customer_address' => $customer->address ?? $customer->name.' Address',
             'province' => 'Bataan',
             'city_municipality' => collect(['Balanga City', 'Mariveles', 'Hermosa', 'Orani', 'Bagac'])->random(),
-            'barangay' => 'Barangay ' . rand(1, 20),
-            'house_no_street' => rand(100, 999) . ' ' . collect(['Rizal St', 'Magsaysay Ave', 'Del Pilar Rd', 'Bonifacio St', 'National Highway'])->random(),
-            'customer_mobile' => '+63 917 ' . str_pad(rand(1000000, 9999999), 7, '0', STR_PAD_LEFT),
+            'barangay' => 'Barangay '.rand(1, 20),
+            'house_no_street' => rand(100, 999).' '.collect(['Rizal St', 'Magsaysay Ave', 'Del Pilar Rd', 'Bonifacio St', 'National Highway'])->random(),
+            'customer_mobile' => '+63 917 '.str_pad(rand(1000000, 9999999), 7, '0', STR_PAD_LEFT),
             'nearest_landmark' => collect(['Near SM Mall', 'Opposite Jollibee', 'Behind Gas Station', 'Near Church', 'Beside School', null])->random(),
             'special_instructions' => $this->getRandomInstructions(),
             'created_by' => rand(0, 1) ? $customer->id : $adminUser->id,
@@ -143,33 +147,33 @@ class BookingSeeder extends Seeder
         $technician = $technicians->random();
         $timeslot = $timeslots->random();
         $airconType = $airconTypes->random();
-        
+
         // Multi-day bookings are typically installations or large commercial jobs
         $service = $services->where('name', 'AC Installation')->first() ?? $services->random();
-        
+
         // Multi-day bookings have more units (5-10)
         $numberOfUnits = rand(5, 10);
-        
+
         // Calculate duration and pricing for multi-day
         $durationData = $this->calculateServiceDuration($service, $numberOfUnits);
         $estimatedDays = max(2, ceil($durationData['total_minutes'] / 480)); // 8 hours per day
         $pricingData = $this->calculatePricing($service, $airconType, $numberOfUnits);
-        
+
         // Date based on period
-        $scheduledDate = $period === 'recent' 
+        $scheduledDate = $period === 'recent'
             ? Carbon::now()->subDays(rand(1, 14))
             : Carbon::now()->subDays(rand(15, 180));
-            
+
         $scheduledEndDate = $scheduledDate->copy()->addDays($estimatedDays - 1);
-        
+
         $status = $period === 'recent'
             ? $this->getRecentBookingStatus($scheduledDate)
             : $this->getHistoricalBookingStatus();
 
         return [
-            'booking_number' => 'KMT-' . str_pad($index, 6, '0', STR_PAD_LEFT),
+            'booking_number' => 'KMT-'.str_pad($index, 6, '0', STR_PAD_LEFT),
             'customer_id' => $customer->id,
-            'customer_name' => rand(0, 1) ? null : $customer->name . ' Company', // Some are commercial
+            'customer_name' => rand(0, 1) ? null : $customer->name.' Company', // Some are commercial
             'service_id' => $service->id,
             'aircon_type_id' => $airconType->id,
             'number_of_units' => $numberOfUnits,
@@ -183,13 +187,13 @@ class BookingSeeder extends Seeder
             'estimated_days' => $estimatedDays,
             'status' => $status,
             'total_amount' => $pricingData['total_amount'],
-            'payment_status' => $status === 'completed' ? 'paid' : ($status === 'cancelled' ? 'refunded' : 'pending'),
-            'customer_address' => $customer->address ?? $customer->name . ' Commercial Building',
+            'payment_status' => $status === 'completed' ? 'paid' : ($status === 'cancelled' ? 'unpaid' : 'pending'),
+            'customer_address' => $customer->address ?? $customer->name.' Commercial Building',
             'province' => 'Bataan',
             'city_municipality' => collect(['Balanga City', 'Mariveles', 'Hermosa', 'Orani', 'Bagac'])->random(),
-            'barangay' => 'Barangay ' . rand(1, 20),
-            'house_no_street' => rand(100, 999) . ' ' . collect(['Commercial Complex', 'Business Center', 'Industrial Zone', 'Corporate Building'])->random(),
-            'customer_mobile' => '+63 917 ' . str_pad(rand(1000000, 9999999), 7, '0', STR_PAD_LEFT),
+            'barangay' => 'Barangay '.rand(1, 20),
+            'house_no_street' => rand(100, 999).' '.collect(['Commercial Complex', 'Business Center', 'Industrial Zone', 'Corporate Building'])->random(),
+            'customer_mobile' => '+63 917 '.str_pad(rand(1000000, 9999999), 7, '0', STR_PAD_LEFT),
             'nearest_landmark' => collect(['Near Business District', 'Beside Factory', 'Main Commercial Area', 'Industrial Park', null])->random(),
             'special_instructions' => $this->getMultiDayInstructions(),
             'created_by' => rand(0, 1) ? $customer->id : $adminUser->id,
@@ -203,36 +207,36 @@ class BookingSeeder extends Seeder
         // Weighted distribution for realistic AC unit counts
         $weights = [
             1 => 50, // 50% - single unit (most common)
-            2 => 25, // 25% - two units  
+            2 => 25, // 25% - two units
             3 => 15, // 15% - three units
             4 => 7,  // 7% - four units
             5 => 3,  // 3% - five units (commercial)
         ];
-        
+
         $rand = rand(1, 100);
         $cumulative = 0;
-        
+
         foreach ($weights as $units => $weight) {
             $cumulative += $weight;
             if ($rand <= $cumulative) {
                 return $units;
             }
         }
-        
+
         return 1; // fallback
     }
 
     private function calculateServiceDuration($service, $numberOfUnits): array
     {
         $baseMinutes = $service->duration_minutes ?? 90;
-        
+
         // Progressive time calculation (efficiency improves with more units)
         $unit1 = $baseMinutes;
         $units2to5 = min(4, max(0, $numberOfUnits - 1)) * ($baseMinutes * 0.8);
         $units6plus = max(0, $numberOfUnits - 5) * ($baseMinutes * 0.6);
-        
+
         $totalMinutes = $unit1 + $units2to5 + $units6plus;
-        
+
         return [
             'total_minutes' => $totalMinutes,
             'estimated_hours' => round($totalMinutes / 60, 1),
@@ -243,21 +247,11 @@ class BookingSeeder extends Seeder
     {
         // Try to get dynamic pricing, fall back to base price
         $basePrice = ServicePricing::getPricing($service->id, $airconType->id) ?? $service->base_price ?? 1500;
-        
-        // Multi-unit pricing with discounts
-        $totalServicePrice = $basePrice; // First unit full price
-        
-        if ($numberOfUnits > 1) {
-            $totalServicePrice += ($basePrice * 0.8); // Second unit 20% discount
-        }
-        
-        if ($numberOfUnits > 2) {
-            $additionalUnits = $numberOfUnits - 2;
-            $totalServicePrice += ($basePrice * 0.7 * $additionalUnits); // 30% discount for 3rd+ units
-        }
-        
+
+        // Simple pricing: base price × number of units
+        $totalServicePrice = $basePrice * $numberOfUnits;
         $totalAmount = $totalServicePrice;
-        
+
         return [
             'service_total' => $totalServicePrice,
             'total_amount' => round($totalAmount, 2),
@@ -267,18 +261,18 @@ class BookingSeeder extends Seeder
     private function getRandomAcBrand(): string
     {
         $brands = [
-            'Samsung', 'LG', 'Carrier', 'Daikin', 'Panasonic', 'Sharp', 
+            'Samsung', 'LG', 'Carrier', 'Daikin', 'Panasonic', 'Sharp',
             'Kolin', 'Koppel', 'Condura', 'Hitachi', 'TCL', 'Haier',
-            'Unknown', 'Unknown', 'Not Sure' // Higher chance of unknown
+            'Unknown', 'Unknown', 'Not Sure', // Higher chance of unknown
         ];
-        
+
         return $brands[array_rand($brands)];
     }
 
     private function getRecentBookingStatus($scheduledDate)
     {
         if ($scheduledDate->isFuture()) {
-            return collect(['pending', 'confirmed'])->random();
+            return collect(['pending', 'pending', 'confirmed', 'cancel_requested'])->random();
         } elseif ($scheduledDate->isToday()) {
             return collect(['confirmed', 'in_progress'])->random();
         } else {
@@ -290,7 +284,7 @@ class BookingSeeder extends Seeder
     {
         return collect([
             'completed', 'completed', 'completed', 'completed', 'completed',
-            'completed', 'completed', 'cancelled', 'cancelled'
+            'completed', 'completed', 'cancelled', 'cancelled',
         ])->random();
     }
 
@@ -307,7 +301,7 @@ class BookingSeeder extends Seeder
             'Water leaking from indoor unit',
             'Please bring ladder for high units',
             'Customer will be available after 10 AM',
-            null, null, null // Some bookings have no instructions
+            null, null, null, // Some bookings have no instructions
         ];
 
         return $instructions[array_rand($instructions)];
@@ -323,7 +317,7 @@ class BookingSeeder extends Seeder
             'Multiple brands and types - bring various tools',
             'Phased installation over multiple days',
             'Coordinate with electrical contractor',
-            null, null // Some have no special instructions
+            null, null, // Some have no special instructions
         ];
 
         return $instructions[array_rand($instructions)];
@@ -338,7 +332,7 @@ class BookingSeeder extends Seeder
         $technicianWeights = [
             'AC Cleaning' => [
                 1 => 45, // Pedro - Cleaning Expert
-                2 => 15, // Maria  
+                2 => 15, // Maria
                 3 => 10, // Jose
                 4 => 25, // Ana - Good at everything
                 5 => 5,  // Carlos
@@ -359,7 +353,7 @@ class BookingSeeder extends Seeder
             ],
             'AC Relocation' => [
                 1 => 5,  // Pedro
-                2 => 45, // Maria - Installation/Relocation Expert  
+                2 => 45, // Maria - Installation/Relocation Expert
                 3 => 15, // Jose
                 4 => 25, // Ana
                 5 => 10, // Carlos
@@ -396,23 +390,23 @@ class BookingSeeder extends Seeder
 
         // Get weights for this service or use balanced weights
         $weights = $technicianWeights[$serviceName] ?? [
-            1 => 20, 2 => 20, 3 => 20, 4 => 20, 5 => 20
+            1 => 20, 2 => 20, 3 => 20, 4 => 20, 5 => 20,
         ];
 
         // Convert technician collection to array indexed by ID
         $techniciansArray = $technicians->keyBy('id');
-        
+
         // Weighted random selection
         $totalWeight = array_sum($weights);
         $random = rand(1, $totalWeight);
-        
+
         foreach ($weights as $technicianId => $weight) {
             $random -= $weight;
             if ($random <= 0 && $techniciansArray->has($technicianId)) {
                 return $techniciansArray->get($technicianId);
             }
         }
-        
+
         // Fallback to random selection
         return $technicians->random();
     }

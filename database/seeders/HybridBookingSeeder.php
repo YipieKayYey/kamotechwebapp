@@ -2,15 +2,14 @@
 
 namespace Database\Seeders;
 
+use App\Models\AirconType;
 use App\Models\Booking;
-use App\Models\User;
 use App\Models\Service;
-
 use App\Models\Technician;
 use App\Models\Timeslot;
-use App\Models\AirconType;
-use Illuminate\Database\Seeder;
+use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Seeder;
 
 class HybridBookingSeeder extends Seeder
 {
@@ -51,7 +50,7 @@ class HybridBookingSeeder extends Seeder
             ],
             [
                 'customer_name' => 'Carlos Mendoza',
-                'customer_address' => '321 National Highway, Orani, Bataan', 
+                'customer_address' => '321 National Highway, Orani, Bataan',
                 'nearest_landmark' => 'Near Orani Public Market',
 
                 'phone_number' => '+63 917 555 3456',
@@ -67,33 +66,47 @@ class HybridBookingSeeder extends Seeder
 
         echo "Creating hybrid bookings (guest customers)...\n";
 
+        $bookingsCreated = 0;
+        $technicianAssignments = [];
+
         foreach ($guestBookings as $index => $guestData) {
             $service = $services->random();
-            
-            // Assign technician based on service expertise (weighted selection)
+
+            // ALWAYS assign technician based on service expertise (weighted selection)
             $technician = $this->selectTechnicianForService($service->name, $technicians);
-            
+
+            // Track technician assignments for reporting
+            $technicianName = $technician->user->name;
+            if (! isset($technicianAssignments[$technicianName])) {
+                $technicianAssignments[$technicianName] = 0;
+            }
+            $technicianAssignments[$technicianName]++;
+
             $timeslot = $timeslots->random();
             $airconType = $airconTypes->random();
-            
+
+            // Random number of units (1-3 for guests, typically smaller jobs)
+            $numberOfUnits = collect([1, 1, 1, 2, 2, 3])->random(); // Weighted towards 1
+
             // Random date in the next 2 weeks
             $scheduledDate = Carbon::now()->addDays(rand(1, 14));
-            
+
             // Calculate pricing (using Booking model for consistency)
             $booking = new Booking([
                 'service_id' => $service->id,
                 'aircon_type_id' => $airconType->id,
-                'number_of_units' => 1
+                'number_of_units' => $numberOfUnits,
             ]);
             $totalAmount = $booking->calculateTotalAmount();
 
             Booking::create([
-                'booking_number' => 'KMT-' . str_pad(1000 + $index, 6, '0', STR_PAD_LEFT),
+                'booking_number' => 'KMT-'.str_pad(66 + $index, 6, '0', STR_PAD_LEFT), // Continue from BookingSeeder (65 + 1)
                 'customer_id' => null, // No customer ID for guest bookings
                 'customer_name' => $guestData['customer_name'],
                 'service_id' => $service->id,
                 'aircon_type_id' => $airconType->id,
-                'technician_id' => rand(0, 1) ? $technician->id : null, // Sometimes auto-assign
+                'technician_id' => $technician->id, // ALWAYS assign technician
+                'number_of_units' => $numberOfUnits,
 
                 'scheduled_date' => $scheduledDate->format('Y-m-d'),
                 'timeslot_id' => $timeslot->id,
@@ -105,18 +118,26 @@ class HybridBookingSeeder extends Seeder
 
                 'province' => 'Bataan',
                 'city_municipality' => collect(['Balanga City', 'Mariveles', 'Hermosa', 'Orani', 'Bagac'])->random(),
-                'barangay' => 'Barangay ' . rand(1, 20),
-                'house_no_street' => rand(100, 999) . ' Guest Address',
+                'barangay' => 'Barangay '.rand(1, 20),
+                'house_no_street' => rand(100, 999).' Guest Address',
                 'customer_mobile' => $guestData['phone_number'],
                 'special_instructions' => $this->getRandomInstructions(),
                 'created_by' => $adminUser->id,
                 'created_at' => Carbon::now()->subMinutes(rand(30, 1440)), // Created within last 24 hours
                 'updated_at' => Carbon::now()->subMinutes(rand(0, 30)),
             ]);
+
+            $bookingsCreated++;
+            echo "  📋 {$guestData['customer_name']} → {$service->name} → {$technicianName}\n";
         }
 
-        echo "✅ Created " . count($guestBookings) . " hybrid bookings with guest customers!\n";
-        echo "📞 Features: Customer names, landmarks, phone numbers for walk-in bookings\n\n";
+        echo "\n✅ Created {$bookingsCreated} hybrid bookings with guest customers!\n";
+        echo "📞 Features: Customer names, landmarks, phone numbers for walk-in bookings\n";
+        echo "🎯 Technician assignments based on service expertise:\n";
+        foreach ($technicianAssignments as $name => $count) {
+            echo "  • {$name}: {$count} jobs\n";
+        }
+        echo "\n";
     }
 
     private function getRandomInstructions(): string
@@ -132,7 +153,7 @@ class HybridBookingSeeder extends Seeder
             'Access through side entrance',
             'Bring extension cord if needed',
             'Dog in the house, please be careful',
-            null // Sometimes no instructions
+            null, // Sometimes no instructions
         ];
 
         return $instructions[array_rand($instructions)] ?? '';
@@ -147,7 +168,7 @@ class HybridBookingSeeder extends Seeder
         $technicianWeights = [
             'AC Cleaning' => [
                 1 => 45, // Pedro - Cleaning Expert
-                2 => 15, // Maria  
+                2 => 15, // Maria
                 3 => 10, // Jose
                 4 => 25, // Ana - Good at everything
                 5 => 5,  // Carlos
@@ -168,7 +189,7 @@ class HybridBookingSeeder extends Seeder
             ],
             'AC Relocation' => [
                 1 => 5,  // Pedro
-                2 => 45, // Maria - Installation/Relocation Expert  
+                2 => 45, // Maria - Installation/Relocation Expert
                 3 => 15, // Jose
                 4 => 25, // Ana
                 5 => 10, // Carlos
@@ -205,23 +226,23 @@ class HybridBookingSeeder extends Seeder
 
         // Get weights for this service or use balanced weights
         $weights = $technicianWeights[$serviceName] ?? [
-            1 => 20, 2 => 20, 3 => 20, 4 => 20, 5 => 20
+            1 => 20, 2 => 20, 3 => 20, 4 => 20, 5 => 20,
         ];
 
         // Convert technician collection to array indexed by ID
         $techniciansArray = $technicians->keyBy('id');
-        
+
         // Weighted random selection
         $totalWeight = array_sum($weights);
         $random = rand(1, $totalWeight);
-        
+
         foreach ($weights as $technicianId => $weight) {
             $random -= $weight;
             if ($random <= 0 && $techniciansArray->has($technicianId)) {
                 return $techniciansArray->get($technicianId);
             }
         }
-        
+
         // Fallback to random selection
         return $technicians->random();
     }

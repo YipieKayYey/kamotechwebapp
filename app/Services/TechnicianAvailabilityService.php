@@ -101,16 +101,18 @@ class TechnicianAvailabilityService
     private function getBlockedTechniciansForDate(string $date, ?int $timeslotId = null): Collection
     {
         $query = Booking::where('status', '!=', 'cancelled')
+            ->where('status', '!=', 'completed') // Don't block if job is completed
             ->where(function ($query) use ($date) {
                 // Single-day bookings on this date
                 $query->where(function ($q) use ($date) {
                     $q->where('scheduled_date', $date)
                       ->whereNull('scheduled_end_date');
                 })
-                // Multi-day bookings that span this date
+                // Multi-day bookings that span this date (improved logic)
                 ->orWhere(function ($q) use ($date) {
                     $q->where('scheduled_date', '<=', $date)
-                      ->where('scheduled_end_date', '>=', $date);
+                      ->where('scheduled_end_date', '>=', $date)
+                      ->whereNotNull('scheduled_end_date');
                 });
             });
 
@@ -298,5 +300,28 @@ class TechnicianAvailabilityService
         
         // Two ranges overlap if: start1 < end2 AND start2 < end1
         return $start1Time < $end2Time && $start2Time < $end1Time;
+    }
+
+    /**
+     * Check if technician is available for consecutive days
+     * 
+     * @param int $technicianId Technician ID
+     * @param string $startDate Start date (Y-m-d)  
+     * @param int $days Number of consecutive days needed
+     * @param int|null $timeslotId Timeslot ID
+     * @return bool True if available for all consecutive days
+     */
+    public function checkConsecutiveDayAvailability(int $technicianId, string $startDate, int $days, ?int $timeslotId = null): bool
+    {
+        for ($i = 0; $i < $days; $i++) {
+            $checkDate = Carbon::parse($startDate)->addDays($i)->format('Y-m-d');
+            $available = $this->getAvailableTechniciansForDate($checkDate, $timeslotId);
+            
+            if (!$available->contains('id', $technicianId)) {
+                return false;
+            }
+        }
+        
+        return true;
     }
 }

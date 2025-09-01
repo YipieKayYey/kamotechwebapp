@@ -18,7 +18,14 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->string('phone')->nullable();
-            $table->text('address')->nullable();
+            $table->text('address')->nullable(); // Keep for compatibility
+
+            // Structured address components
+            $table->string('province')->nullable();
+            $table->string('city_municipality')->nullable();
+            $table->string('barangay')->nullable();
+            $table->string('house_no_street')->nullable();
+
             $table->enum('role', ['customer', 'technician', 'admin'])->default('customer');
             $table->boolean('is_active')->default(true);
             $table->string('avatar')->nullable();

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { useState, useEffect } from 'react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { 
   Star, 
   Calendar, 
@@ -10,8 +10,16 @@ import {
   ArrowLeft,
   CheckCircle,
   MessageSquare,
-  Send
+  Send,
+  X
 } from 'lucide-react';
+import { 
+  reviewApi, 
+  handleApiError,
+  type ReviewCategory,
+  type BookingForReview,
+  type CategoryScore
+} from '@/services/customerApi';
 
 // Scoped styles for this component only
 const styles = {
@@ -275,104 +283,116 @@ const styles = {
   }
 };
 
-interface BookingDetails {
-  id: string;
-  serviceType: string;
-  date: string;
-  time: string;
-  technician: string;
-  location: string;
-  acType: string;
-  units: number;
-  brand: string;
-}
-
-interface EvaluationCriteria {
-  punctuality: number;
-  qualityOfWork: number;
-  professionalism: number;
-  communication: number;
-  problemSolving: number;
-  cleanliness: number;
-  attentionToDetail: number;
-  friendliness: number;
-  serviceSpeed: number;
-  reliability: number;
-  safetyPractices: number;
-  preparedness: number;
-  likelihoodToRecommend: number;
-}
-
 interface EvaluationFeedbackProps {
-  booking: BookingDetails;
+  bookingId?: string;
 }
 
-const criteriaLabels = {
-  punctuality: 'Punctuality',
-  qualityOfWork: 'Quality of Work',
-  professionalism: 'Professionalism',
-  communication: 'Communication',
-  problemSolving: 'Problem-Solving Ability',
-  cleanliness: 'Cleanliness & Work Area Handling',
-  attentionToDetail: 'Attention to Detail',
-  friendliness: 'Friendliness',
-  serviceSpeed: 'Service Speed',
-  reliability: 'Reliability',
-  safetyPractices: 'Safety Practices',
-  preparedness: 'Preparedness',
-  likelihoodToRecommend: 'Likelihood to Recommend'
-};
+interface PageProps {
+  bookingId?: string;
+  [key: string]: any;
+}
 
-export default function EvaluationFeedback({ booking }: EvaluationFeedbackProps) {
-  const [ratings, setRatings] = useState<EvaluationCriteria>({
-    punctuality: 0,
-    qualityOfWork: 0,
-    professionalism: 0,
-    communication: 0,
-    problemSolving: 0,
-    cleanliness: 0,
-    attentionToDetail: 0,
-    friendliness: 0,
-    serviceSpeed: 0,
-    reliability: 0,
-    safetyPractices: 0,
-    preparedness: 0,
-    likelihoodToRecommend: 0
-  });
-
+export default function EvaluationFeedback() {
+  const { props } = usePage<PageProps>();
+  const [bookingData, setBookingData] = useState<BookingForReview | null>(null);
+  const [categories, setCategories] = useState<ReviewCategory[]>([]);
+  const [ratings, setRatings] = useState<Record<number, number>>({});
   const [writtenFeedback, setWrittenFeedback] = useState('');
-  const [suggestions, setSuggestions] = useState('');
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Get booking ID from URL params or props
+  const bookingId = props.bookingId || new URLSearchParams(window.location.search).get('bookingId');
+  
+  useEffect(() => {
+    if (bookingId) {
+      loadBookingAndCategories();
+    } else {
+      setError('No booking ID provided');
+      setLoading(false);
+    }
+  }, [bookingId]);
+  
+  const loadBookingAndCategories = async () => {
+    try {
+      setLoading(true);
+      const [booking, reviewCategories] = await Promise.all([
+        reviewApi.getBookingForReview(parseInt(bookingId!)),
+        reviewApi.getReviewCategories()
+      ]);
+      
+      setBookingData(booking);
+      setCategories(reviewCategories);
+      
+      // Initialize ratings state
+      const initialRatings: Record<number, number> = {};
+      reviewCategories.forEach(category => {
+        initialRatings[category.id] = 0;
+      });
+      setRatings(initialRatings);
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      setError(errorMessage);
+      console.error('Error loading booking and categories:', errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const handleRatingChange = (criterion: keyof EvaluationCriteria, rating: number) => {
+  const handleRatingChange = (categoryId: number, rating: number) => {
     setRatings(prev => ({
       ...prev,
-      [criterion]: rating
+      [categoryId]: rating
     }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!bookingData || !isFormValid()) {
+      return;
+    }
+    
     setIsSubmitting(true);
+    setError(null);
 
-    // Simulate API call
-    setTimeout(() => {
-      setShowSuccessAlert(true);
-      setIsSubmitting(false);
+    try {
+      // Prepare category scores for submission
+      const categoryScores: CategoryScore[] = Object.entries(ratings)
+        .filter(([_, score]) => score > 0)
+        .map(([categoryId, score]) => ({
+          category_id: parseInt(categoryId),
+          score: score
+        }));
+
+      await reviewApi.submitReview(bookingData.id, {
+        category_scores: categoryScores,
+        review_text: writtenFeedback.trim() || undefined
+      });
       
-      // Hide success alert after 5 seconds
+      setShowSuccessAlert(true);
+      
+      // Redirect to dashboard after 3 seconds
       setTimeout(() => {
-        setShowSuccessAlert(false);
-      }, 5000);
-    }, 1000);
+        router.visit('/customer-dashboard');
+      }, 3000);
+      
+    } catch (error) {
+      const errorMessage = handleApiError(error);
+      setError(errorMessage);
+      console.error('Error submitting review:', errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const goBack = () => {
     router.visit('/customer-dashboard');
   };
 
-  const renderStars = (criterion: keyof EvaluationCriteria) => {
+  const renderStars = (categoryId: number) => {
     return (
       <div style={styles.starRating}>
         {[1, 2, 3, 4, 5].map((star) => (
@@ -381,15 +401,15 @@ export default function EvaluationFeedback({ booking }: EvaluationFeedbackProps)
             type="button"
             style={{
               ...styles.star,
-              ...(ratings[criterion] >= star ? styles.starActive : {})
+              ...(ratings[categoryId] >= star ? styles.starActive : {})
             }}
-            onClick={() => handleRatingChange(criterion, star)}
+            onClick={() => handleRatingChange(categoryId, star)}
             onMouseEnter={(e) => {
               e.currentTarget.style.color = '#fbbf24';
               e.currentTarget.style.transform = 'scale(1.1)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = ratings[criterion] >= star ? '#f59e0b' : '#d1d5db';
+              e.currentTarget.style.color = ratings[categoryId] >= star ? '#f59e0b' : '#d1d5db';
               e.currentTarget.style.transform = 'scale(1)';
             }}
           >
@@ -401,9 +421,40 @@ export default function EvaluationFeedback({ booking }: EvaluationFeedbackProps)
   };
 
   const isFormValid = () => {
-    const allRatingsProvided = Object.values(ratings).every(rating => rating > 0);
+    const allRatingsProvided = categories.every(category => ratings[category.id] > 0);
     return allRatingsProvided && writtenFeedback.trim().length > 0;
   };
+  
+  if (loading) {
+    return (
+      <div style={styles.page}>
+        <div style={{ ...styles.container, textAlign: 'center', padding: '4rem 2rem' }}>
+          <div style={styles.spinner}></div>
+          <p style={{ marginTop: '1rem', color: 'var(--muted-foreground)' }}>Loading review form...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (error || !bookingData) {
+    return (
+      <div style={styles.page}>
+        <div style={{ ...styles.container, textAlign: 'center', padding: '4rem 2rem' }}>
+          <h1 style={{ color: '#dc2626', marginBottom: '1rem' }}>Error</h1>
+          <p style={{ color: 'var(--muted-foreground)', marginBottom: '2rem' }}>
+            {error || 'Booking not found or not eligible for review'}
+          </p>
+          <button 
+            style={styles.backButton}
+            onClick={goBack}
+          >
+            <ArrowLeft className="w-5 h-5" />
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -465,7 +516,17 @@ export default function EvaluationFeedback({ booking }: EvaluationFeedbackProps)
           <div style={styles.successAlert}>
             <div style={styles.successAlertContent}>
               <CheckCircle className="w-6 h-6" />
-              <span>Thank you for your feedback! Your input helps us improve our services.</span>
+              <span>Thank you for your feedback! Redirecting to dashboard...</span>
+            </div>
+          </div>
+        )}
+        
+        {/* Error Alert */}
+        {error && (
+          <div style={{ ...styles.successAlert, background: '#dc2626' }}>
+            <div style={styles.successAlertContent}>
+              <X className="w-6 h-6" />
+              <span>{error}</span>
             </div>
           </div>
         )}
@@ -503,35 +564,45 @@ export default function EvaluationFeedback({ booking }: EvaluationFeedbackProps)
             <div style={styles.detailsGrid} className="responsive-grid-2">
               <div style={styles.detailItem}>
                 <span style={styles.detailLabel}>Service Type:</span>
-                <span style={styles.detailValue}>{booking.serviceType}</span>
+                <span style={styles.detailValue}>{bookingData.service.name}</span>
               </div>
               <div style={styles.detailItem}>
                 <Calendar className="w-4 h-4" />
                 <span style={styles.detailLabel}>Date:</span>
-                <span style={styles.detailValue}>{new Date(booking.date).toLocaleDateString()}</span>
+                <span style={styles.detailValue}>{new Date(bookingData.scheduled_date).toLocaleDateString()}</span>
               </div>
               <div style={styles.detailItem}>
                 <Clock className="w-4 h-4" />
                 <span style={styles.detailLabel}>Time:</span>
-                <span style={styles.detailValue}>{booking.time}</span>
+                <span style={styles.detailValue}>{bookingData.timeslot}</span>
               </div>
               <div style={styles.detailItem}>
                 <User className="w-4 h-4" />
                 <span style={styles.detailLabel}>Technician:</span>
-                <span style={styles.detailValue}>{booking.technician}</span>
+                <span style={styles.detailValue}>{bookingData.technician.name}</span>
               </div>
               <div style={styles.detailItem}>
                 <MapPin className="w-4 h-4" />
                 <span style={styles.detailLabel}>Location:</span>
-                <span style={styles.detailValue}>{booking.location}</span>
+                <span style={styles.detailValue}>{bookingData.service_location}</span>
               </div>
               <div style={styles.detailItem}>
                 <span style={styles.detailLabel}>AC Type:</span>
-                <span style={styles.detailValue}>{booking.acType} - {booking.units} unit{booking.units > 1 ? 's' : ''}</span>
+                <span style={styles.detailValue}>{bookingData.aircon_type.name} - {bookingData.number_of_units} unit{bookingData.number_of_units > 1 ? 's' : ''}</span>
+              </div>
+              {bookingData.ac_brand && (
+                <div style={styles.detailItem}>
+                  <span style={styles.detailLabel}>Brand:</span>
+                  <span style={styles.detailValue}>{bookingData.ac_brand}</span>
+                </div>
+              )}
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Total Amount:</span>
+                <span style={styles.detailValue}>₱{bookingData.total_amount.toLocaleString()}</span>
               </div>
               <div style={styles.detailItem}>
-                <span style={styles.detailLabel}>Brand:</span>
-                <span style={styles.detailValue}>{booking.brand}</span>
+                <span style={styles.detailLabel}>Completed:</span>
+                <span style={styles.detailValue}>{new Date(bookingData.completed_date).toLocaleDateString()}</span>
               </div>
             </div>
           </div>
@@ -549,9 +620,9 @@ export default function EvaluationFeedback({ booking }: EvaluationFeedbackProps)
               </div>
               
               <div style={styles.ratingGrid} className="responsive-grid-2">
-                {Object.entries(criteriaLabels).map(([key, label]) => (
+                {categories.map((category) => (
                   <div 
-                    key={key} 
+                    key={category.id} 
                     style={styles.ratingItem}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background = 'var(--accent)';
@@ -566,12 +637,17 @@ export default function EvaluationFeedback({ booking }: EvaluationFeedbackProps)
                       e.currentTarget.style.boxShadow = 'none';
                     }}
                   >
-                    <label style={styles.ratingLabel}>{label}</label>
-                    {renderStars(key as keyof EvaluationCriteria)}
+                    <label style={styles.ratingLabel}>{category.name}</label>
+                    {category.description && (
+                      <p style={{ ...styles.ratingText, fontSize: '0.8rem', margin: '0.25rem 0' }}>
+                        {category.description}
+                      </p>
+                    )}
+                    {renderStars(category.id)}
                     <span style={styles.ratingText}>
-                      {ratings[key as keyof EvaluationCriteria] === 0 
+                      {ratings[category.id] === 0 
                         ? 'Not rated' 
-                        : `${ratings[key as keyof EvaluationCriteria]} star${ratings[key as keyof EvaluationCriteria] > 1 ? 's' : ''}`
+                        : `${ratings[category.id]} star${ratings[category.id] > 1 ? 's' : ''}`
                       }
                     </span>
                   </div>
@@ -612,42 +688,6 @@ export default function EvaluationFeedback({ booking }: EvaluationFeedbackProps)
                 />
                 <div style={styles.characterCount}>
                   {writtenFeedback.length} characters
-                </div>
-              </div>
-            </div>
-
-            {/* Suggestions Section */}
-            <div style={styles.card}>
-              <div style={styles.sectionHeader}>
-                <h2 style={styles.sectionTitle}>
-                  <MessageSquare className="w-5 h-5" />
-                  Suggestions for Improvement
-                </h2>
-                <p style={styles.sectionSubtitle}>Help us serve you better (optional)</p>
-              </div>
-              
-              <div style={styles.feedbackField}>
-                <label htmlFor="suggestions" style={styles.fieldLabel}>
-                  Your Suggestions
-                </label>
-                <textarea
-                  id="suggestions"
-                  style={styles.textarea}
-                  placeholder="Any suggestions on how we can improve our services?"
-                  value={suggestions}
-                  onChange={(e) => setSuggestions(e.target.value)}
-                  rows={4}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = '#083860';
-                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(8, 56, 96, 0.1)';
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--border)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                />
-                <div style={styles.characterCount}>
-                  {suggestions.length} characters
                 </div>
               </div>
             </div>
@@ -701,18 +741,3 @@ export default function EvaluationFeedback({ booking }: EvaluationFeedbackProps)
     </>
   );
 }
-
-// Default booking data for demo purposes - this would come from props in real implementation
-EvaluationFeedback.defaultProps = {
-  booking: {
-    id: 'BK002',
-    serviceType: 'AC Repair',
-    date: '2024-01-28',
-    time: '2:00 PM - 5:00 PM',
-    technician: 'Miguel Garcia',
-    location: '123 Main St, Poblacion, Balanga, Bataan',
-    acType: 'Window Type',
-    units: 1,
-    brand: 'LG'
-  }
-};

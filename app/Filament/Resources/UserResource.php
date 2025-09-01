@@ -3,30 +3,23 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\UserResource\Pages;
-use App\Filament\Resources\UserResource\RelationManagers;
 use App\Models\User;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Forms\Components\Section;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Toggle;
-use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\FileUpload;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class UserResource extends Resource
 {
     protected static ?string $model = User::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-users';
+
     protected static ?string $navigationGroup = 'User Management';
+
     protected static ?string $navigationLabel = 'Users';
+
     protected static ?int $navigationSort = 1;
 
     public static function form(Form $form): Form
@@ -53,18 +46,40 @@ class UserResource extends Resource
                             ->placeholder('09123456789'),
                     ])
                     ->columns(2),
-                    
+
                 Forms\Components\Section::make('Contact & Address')
                     ->schema([
                         Forms\Components\Textarea::make('address')
-                            ->label('Address')
-                            ->rows(3)
-                            ->placeholder('Enter complete address (Street, Barangay, City, Province)')
+                            ->label('Legacy Address (Optional)')
+                            ->rows(2)
+                            ->placeholder('For backward compatibility - leave empty if using structured address')
+                            ->helperText('Use structured address fields below for new/updated entries')
+                            ->columnSpanFull(),
+
+                        Forms\Components\TextInput::make('province')
+                            ->label('Province')
+                            ->placeholder('e.g., Bataan')
+                            ->helperText('Enter province name'),
+
+                        Forms\Components\TextInput::make('city_municipality')
+                            ->label('City/Municipality')
+                            ->placeholder('e.g., Balanga City, Hermosa')
+                            ->helperText('Enter city or municipality name'),
+
+                        Forms\Components\TextInput::make('barangay')
+                            ->label('Barangay')
+                            ->placeholder('e.g., Central, Poblacion')
+                            ->helperText('Enter barangay name'),
+
+                        Forms\Components\TextInput::make('house_no_street')
+                            ->label('House No. & Street')
+                            ->placeholder('e.g., 123 Rizal Street')
+                            ->helperText('Enter house number and street name')
                             ->columnSpanFull(),
 
                     ])
-                    ->columns(1),
-                    
+                    ->columns(3),
+
                 Forms\Components\Section::make('Account Settings')
                     ->schema([
                         Forms\Components\Select::make('role')
@@ -112,6 +127,19 @@ class UserResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('phone')
                     ->searchable(),
+                Tables\Columns\TextColumn::make('formatted_address')
+                    ->label('Address')
+                    ->searchable(['address', 'province', 'city_municipality', 'barangay', 'house_no_street'])
+                    ->sortable()
+                    ->limit(40)
+                    ->tooltip(function ($record) {
+                        return $record->formatted_address;
+                    }),
+                Tables\Columns\TextColumn::make('city_municipality')
+                    ->label('City')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('role'),
                 Tables\Columns\IconColumn::make('is_active')
                     ->boolean(),

@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\TechnicianResource\Pages;
 use App\Filament\Resources\TechnicianResource\RelationManagers;
+use App\Filament\Resources\TechnicianResource\Tables\TechniciansTable;
 use App\Models\Technician;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -19,6 +20,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Group;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Facades\Log;
 
 class TechnicianResource extends Resource
 {
@@ -28,6 +30,23 @@ class TechnicianResource extends Resource
     protected static ?string $navigationGroup = 'Technician Management';
     protected static ?string $navigationLabel = 'Technicians';
     protected static ?int $navigationSort = 1;
+
+    public static function getNavigationBadge(): ?string
+    {
+        $highCommissionCount = static::getModel()::where('commission_rate', '>=', 20)->count();
+        return $highCommissionCount > 0 ? $highCommissionCount : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'success';
+    }
+
+    public static function getNavigationBadgeTooltip(): ?string 
+    {
+        $highCommissionCount = static::getModel()::where('commission_rate', '>=', 20)->count();
+        return $highCommissionCount > 0 ? "{$highCommissionCount} technician(s) with premium commission (20%+)" : null;
+    }
 
     public static function form(Form $form): Form
     {
@@ -133,103 +152,64 @@ class TechnicianResource extends Resource
                     ])
                     ->columns(1),
                     
-                Forms\Components\Section::make('Internal Management (Admin Only)')
-                    ->description('Commission and performance tracking - internal use only')
+                Forms\Components\Section::make('💰 Commission & Financial Settings')
+                    ->description('Manage technician commission rates and financial tracking')
                     ->schema([
-                        Forms\Components\TextInput::make('commission_rate')
-                            ->label('Commission Rate (%)')
-                            ->required()
-                            ->numeric()
-                            ->suffix('%')
-                            ->step(0.01)
-                            ->default(15.00)
-                            ->helperText('Percentage commission on completed jobs - keep confidential'),
-                        Forms\Components\TextInput::make('total_jobs')
-                            ->label('Total Jobs Completed')
-                            ->numeric()
-                            ->default(0)
-                            ->disabled()
-                            ->helperText('Automatically updated when jobs are completed'),
-                        Forms\Components\TextInput::make('current_jobs')
-                            ->label('Current Active Jobs')
-                            ->numeric()
-                            ->default(0)
-                            ->disabled()
-                            ->helperText('Automatically updated when jobs are assigned'),
+                        Forms\Components\Group::make([
+                            Forms\Components\TextInput::make('commission_rate')
+                                ->label('Commission Rate (%)')
+                                ->required()
+                                ->numeric()
+                                ->suffix('%')
+                                ->step(0.01)
+                                ->minValue(5.00)
+                                ->maxValue(30.00)
+                                ->default(15.00)
+                                ->helperText('Commission percentage on completed bookings (5% - 30%)')
+                                ->live()
+                                ->afterStateUpdated(function ($state, callable $set) {
+                                    // Update commission examples in real-time
+                                    $rate = $state ?? 15;
+                                    $commission1 = 1000 * ($rate / 100);
+                                    $commission2 = 2500 * ($rate / 100);
+                                    $set('commission_examples', "₱1000 → ₱" . number_format($commission1, 0) . " | ₱2500 → ₱" . number_format($commission2, 0));
+                                }),
+
+                            Forms\Components\TextInput::make('commission_examples')
+                                ->label('Commission Examples')
+                                ->disabled()
+                                ->dehydrated(false)
+                                ->default(function (callable $get): string {
+                                    $rate = $get('commission_rate') ?? 15;
+                                    $commission1 = 1000 * ($rate / 100);
+                                    $commission2 = 2500 * ($rate / 100);
+                                    return "₱1000 → ₱" . number_format($commission1, 0) . " | ₱2500 → ₱" . number_format($commission2, 0);
+                                })
+                                ->helperText('Real-time calculation based on commission rate'),
+                        ])->columns(2),
+
+                        Forms\Components\Group::make([
+                            Forms\Components\TextInput::make('total_jobs')
+                                ->label('Total Jobs Completed')
+                                ->numeric()
+                                ->default(0)
+                                ->disabled()
+                                ->helperText('Automatically updated when jobs are completed'),
+                            Forms\Components\TextInput::make('current_jobs')
+                                ->label('Current Active Jobs')
+                                ->numeric()
+                                ->default(0)
+                                ->disabled()
+                                ->helperText('Automatically updated when jobs are assigned'),
+                        ])->columns(2),
                     ])
-                    ->columns(3)
-                    ->collapsible()
-                    ->collapsed(),
+                    ->collapsible(),
             ]);
     }
 
     public static function table(Table $table): Table
     {
-        return $table
-            ->columns([
-                Tables\Columns\TextColumn::make('user.name')
-                    ->label('Technician Name')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('employee_id')
-                    ->label('Employee ID')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\IconColumn::make('is_available')
-                    ->label('Available')
-                    ->boolean()
-                    ->sortable(),
-
-                Tables\Columns\TextColumn::make('rating_average')
-                    ->label('Rating')
-                    ->numeric(decimalPlaces: 1)
-                    ->sortable()
-                    ->suffix('/5'),
-                Tables\Columns\TextColumn::make('total_jobs')
-                    ->label('Total Jobs')
-                    ->numeric()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('current_jobs')
-                    ->label('Active Jobs')
-                    ->numeric()
-                    ->sortable(),
-
-                Tables\Columns\TextColumn::make('hire_date')
-                    ->label('Hire Date')
-                    ->date()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('commission_rate')
-                    ->label('Commission (%)')
-                    ->numeric(decimalPlaces: 1)
-                    ->suffix('%')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('max_daily_jobs')
-                    ->label('Max Daily Jobs')
-                    ->numeric()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-            ])
-            ->filters([
-                //
-            ])
-            ->actions([
-                Tables\Actions\EditAction::make(),
-            ])
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
-            ]);
+        return TechniciansTable::configure($table);
     }
 
     public static function getRelations(): array

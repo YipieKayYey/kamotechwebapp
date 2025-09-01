@@ -32,7 +32,7 @@ export default function Welcome() {
                             
                             <div className="company-hero-card">
                                 <div className="company-tagline">
-                                    <span className="tagline-text">"Your Comfort, Our Priority"</span>
+                                    <span className="tagline-text">"Find the affordable, Find your satisfaction!"</span>
                                 </div>
                                 
                                 <div className="company-description">
@@ -47,7 +47,7 @@ export default function Welcome() {
                                 
                                 <div className="company-cta">
                                     <button className="reliable-service-btn">
-                                        Reliable service you can count on.
+                                        Your Comfort, Our Priority
                                     </button>
                                 </div>
                                 
@@ -119,13 +119,13 @@ export default function Welcome() {
                                 <p className="choice-service-description">Need a new AC installed?</p>
                                 <Link href={route('booking')} className="choice-book-btn">Book Now</Link>
                             </div>
-                            
+
                             <div className="choice-service-card">
                                 <div className="choice-service-image">
-                                    <img src="/images/ac-maintenance.jpg" alt="AC Maintenance" />
+                                    <img src="/images/ac-freon.jpg" alt="AC Freon Charging" />
                                 </div>
-                                <h3 className="choice-service-title">AC Maintenance</h3>
-                                <p className="choice-service-description">Keep your AC running smoothly.</p>
+                                <h3 className="choice-service-title">AC Freon Charging</h3>
+                                <p className="choice-service-description">Is your AC not cooling enough?</p>
                                 <Link href={route('booking')} className="choice-book-btn">Book Now</Link>   
                             </div>
                         </div>
@@ -174,15 +174,6 @@ export default function Welcome() {
                         </div>
                         
                         <div className="more-services-grid">
-                            <div className="more-service-card">
-                                <div className="more-service-image">
-                                    <img src="/images/ac-freon.jpg" alt="AC Freon Charging" />
-                                </div>
-                                <h3 className="more-service-title">AC Freon Charging</h3>
-                                <p className="more-service-description">Is your AC not cooling enough?</p>
-                                <Link href={route('booking')} className="more-book-btn">Book Now</Link>
-                            </div>
-                            
                             <div className="more-service-card">
                                 <div className="more-service-image">
                                     <img src="/images/ac-repiping.jpg" alt="Repiping" />

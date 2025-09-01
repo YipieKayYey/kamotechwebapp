@@ -12,14 +12,12 @@ class Service extends Model
         'description',
         'base_price',
         'duration_minutes',
-        'requires_parts',
         'is_active',
         'category',
     ];
 
     protected $casts = [
         'base_price' => 'decimal:2',
-        'requires_parts' => 'boolean',
         'is_active' => 'boolean',
     ];
 

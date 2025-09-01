@@ -18,7 +18,6 @@ class ServiceSeeder extends Seeder
                 'description' => 'Complete air conditioning unit cleaning including filters, coils, and drainage.',
                 'base_price' => 800.00,
                 'duration_minutes' => 90,
-                'requires_parts' => false,
                 'category' => 'maintenance',
             ],
             [
@@ -26,7 +25,6 @@ class ServiceSeeder extends Seeder
                 'description' => 'General AC repair services for common issues and malfunctions.',
                 'base_price' => 1500.00,
                 'duration_minutes' => 120,
-                'requires_parts' => true,
                 'category' => 'repair',
             ],
             [
@@ -34,7 +32,6 @@ class ServiceSeeder extends Seeder
                 'description' => 'Professional installation of new air conditioning units.',
                 'base_price' => 2500.00,
                 'duration_minutes' => 180,
-                'requires_parts' => true,
                 'category' => 'installation',
             ],
             [
@@ -42,7 +39,6 @@ class ServiceSeeder extends Seeder
                 'description' => 'Regular maintenance service to keep your AC running efficiently.',
                 'base_price' => 1000.00,
                 'duration_minutes' => 120,
-                'requires_parts' => false,
                 'category' => 'maintenance',
             ],
             [
@@ -50,7 +46,6 @@ class ServiceSeeder extends Seeder
                 'description' => 'Refrigerant refill and system pressure check.',
                 'base_price' => 1200.00,
                 'duration_minutes' => 60,
-                'requires_parts' => true,
                 'category' => 'repair',
             ],
             [
@@ -58,7 +53,6 @@ class ServiceSeeder extends Seeder
                 'description' => 'Diagnostic service to identify AC problems and issues.',
                 'base_price' => 600.00,
                 'duration_minutes' => 60,
-                'requires_parts' => false,
                 'category' => 'diagnosis',
             ],
             [
@@ -66,7 +60,6 @@ class ServiceSeeder extends Seeder
                 'description' => 'Safe removal and reinstallation of AC units to new locations.',
                 'base_price' => 2000.00,
                 'duration_minutes' => 240,
-                'requires_parts' => false,
                 'category' => 'installation',
             ],
             [
@@ -74,7 +67,6 @@ class ServiceSeeder extends Seeder
                 'description' => 'Replacement of refrigerant pipes and connections.',
                 'base_price' => 1800.00,
                 'duration_minutes' => 180,
-                'requires_parts' => true,
                 'category' => 'repair',
             ],
         ];

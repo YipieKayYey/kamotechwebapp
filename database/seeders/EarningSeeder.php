@@ -2,11 +2,11 @@
 
 namespace Database\Seeders;
 
-use App\Models\Earning;
 use App\Models\Booking;
+use App\Models\Earning;
 use App\Models\Technician;
-use Illuminate\Database\Seeder;
 use Carbon\Carbon;
+use Illuminate\Database\Seeder;
 
 class EarningSeeder extends Seeder
 {
@@ -15,21 +15,41 @@ class EarningSeeder extends Seeder
      */
     public function run(): void
     {
-        // Get all completed bookings with technician data
-        $completedBookings = Booking::where('status', 'completed')
-            ->where('payment_status', 'paid')
-            ->with(['technician'])
+        // Get ALL bookings that have technicians (pending, in_progress, completed)
+        $bookingsWithTechnicians = Booking::whereNotNull('technician_id')
+            ->whereIn('status', ['pending', 'confirmed', 'in_progress', 'completed'])
+            ->with(['technician.user'])
             ->get();
 
-        foreach ($completedBookings as $booking) {
+        if ($bookingsWithTechnicians->isEmpty()) {
+            echo "⚠️  No bookings with technicians found. Earnings will be empty.\n";
+            echo "💡 Make sure BookingSeeder creates bookings with assigned technicians.\n\n";
+
+            return;
+        }
+
+        echo "💰 Creating earnings for {$bookingsWithTechnicians->count()} bookings with technicians...\n";
+
+        $earningsCreated = 0;
+        $totalEarningsAmount = 0;
+
+        foreach ($bookingsWithTechnicians as $booking) {
             $technician = $booking->technician;
-            
+
             if ($technician) {
                 // Calculate commission based on technician's commission rate
                 $totalAmount = $booking->total_amount;
                 $commissionRate = $technician->commission_rate / 100; // Convert percentage to decimal
-                $commissionAmount = $totalAmount * $commissionRate;
-                
+                $commissionAmount = round($totalAmount * $commissionRate, 2);
+
+                // Add occasional bonuses for high-rated technicians
+                $bonusAmount = 0;
+                if ($technician->rating_average >= 4.8 && rand(1, 4) == 1) {
+                    $bonusAmount = round($commissionAmount * 0.1, 2); // 10% bonus
+                }
+
+                $finalAmount = $commissionAmount + $bonusAmount;
+
                 // Create earning record
                 Earning::create([
                     'technician_id' => $booking->technician_id,
@@ -37,42 +57,49 @@ class EarningSeeder extends Seeder
                     'base_amount' => $totalAmount,
                     'commission_rate' => $technician->commission_rate,
                     'commission_amount' => $commissionAmount,
-                    'bonus_amount' => 0, // No bonus for now
-                    'total_amount' => $commissionAmount, // Total earning is the commission
+                    'bonus_amount' => $bonusAmount,
+                    'total_amount' => $finalAmount,
                     'payment_status' => $this->getPaymentStatus($booking),
                     'paid_at' => $this->getPaidAt($booking),
                     'created_at' => $booking->updated_at->addHours(1),
                     'updated_at' => $booking->updated_at->addHours(1),
                 ]);
+
+                $earningsCreated++;
+                $totalEarningsAmount += $finalAmount;
+
+                $bonusText = $bonusAmount > 0 ? " (+ ₱{$bonusAmount} bonus)" : '';
+                echo "  💵 {$technician->user->name}: ₱{$finalAmount}{$bonusText}\n";
+            } else {
+                echo "  ⚠️  Booking {$booking->booking_number} has no technician assigned\n";
             }
         }
+
+        echo "\n✅ Created {$earningsCreated} earnings records\n";
+        echo '💰 Total earnings: ₱'.number_format($totalEarningsAmount, 2)."\n";
+        echo '📊 Average earning: ₱'.number_format($earningsCreated > 0 ? $totalEarningsAmount / $earningsCreated : 0, 2)."\n\n";
     }
 
     private function getPaymentStatus($booking): string
     {
-        // Most earnings are paid within a week of job completion
-        $daysSinceCompletion = Carbon::now()->diffInDays($booking->updated_at);
-        
-        if ($daysSinceCompletion > 7) {
-            return 'paid';
-        } elseif ($daysSinceCompletion > 3) {
-            return rand(0, 1) ? 'paid' : 'pending';
-        } else {
-            return 'pending';
-        }
+        // Simple logic: commission status follows booking status
+        return match($booking->status) {
+            'completed' => 'paid',           // Job done = commission paid
+            'cancelled' => 'unpaid',         // Job cancelled = no commission
+            'pending', 'in_progress', 'confirmed' => 'pending',  // Job not finished = commission pending
+            default => 'pending'
+        };
     }
 
     private function getPaidAt($booking): ?string
     {
         $paymentStatus = $this->getPaymentStatus($booking);
-        
+
         if ($paymentStatus === 'paid') {
-            // Payment typically happens 3-10 days after job completion
-            return $booking->updated_at
-                ->addDays(rand(3, 10))
-                ->format('Y-m-d H:i:s');
+            // For completed jobs, payment happens immediately when marked complete
+            return $booking->completed_at ?? $booking->updated_at;
         }
-        
+
         return null;
     }
 }

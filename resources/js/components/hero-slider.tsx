@@ -22,27 +22,27 @@ const slides: SlideData[] = [
     {
         id: 1,
         backgroundImage: '/images/slide/1.jpg',
-        welcome: 'Welcome to Kamotech',
-        title: 'FAST AND RELIABLE AIR CONDITIONING SERVICES',
-        subtitle: 'Book a service at very affordable price!',
+        welcome: 'Kamotech Aircon Services',
+        title: 'PRICE STARTS AT 450 PESOS!',
+        subtitle: 'Find the affordable, Find your satisfaction!',
         primaryButton: {
             text: 'BOOK NOW',
-            href: '#booking'
+            href: '/booking'
         },
         secondaryButton: {
             text: 'SIGN UP',
-            href: '/register'
+            href: route('register')
         }
     },
     {
         id: 2,
         backgroundImage: '/images/slide/2.jpg',
-        welcome: 'Professional AC Services',
-        title: 'EXPERT INSTALLATION & MAINTENANCE',
-        subtitle: 'Quality workmanship with 24/7 emergency support!',
+        welcome: 'Reliable Aircon Services Anytime, Anywhere',
+        title: 'FREE SURVEY & FREE CHECKUP!',
+        subtitle: 'Cleaning • Repair • Freon Charging • Installation • Relocation & More',
         primaryButton: {
             text: 'GET QUOTE',
-            href: '#booking'
+            href: route('booking')
         },
         secondaryButton: {
             text: 'LEARN MORE',
@@ -52,9 +52,9 @@ const slides: SlideData[] = [
     {
         id: 3,
         backgroundImage: '/images/slide/3.jpg',
-        welcome: 'Trusted Since Day One',
-        title: 'ALL BRANDS SERVICED WITH CARE',
-        subtitle: 'From cleaning to repairs - we handle it all!',
+        welcome: 'Celebrate the Start of the Ber Months',
+        title: 'BER MONTHS KICKOFF SALE – SEPT 30–OCT 1',
+        subtitle: 'Aircon Cleaning Starts at ₱450 • Free Survey & Checkup',
         primaryButton: {
             text: 'VIEW SERVICES',
             href: '#services'
@@ -67,18 +67,18 @@ const slides: SlideData[] = [
     {
         id: 4,
         backgroundImage: '/images/slide/4.jpg',
-        welcome: 'Quality You Can Trust',
-        title: 'AFFORDABLE PRICES, EXCEPTIONAL SERVICE',
-        subtitle: 'Your satisfaction is our guarantee!',
+        welcome: 'New Customers Get More Savings',
+        title: 'GET 10% OFF YOUR FIRST SERVICE',
+        subtitle: 'Book today and experience professional, affordable aircon care.',
         primaryButton: {
             text: 'SCHEDULE NOW',
             href: '#booking'
         },
         secondaryButton: {
-            text: 'GET ESTIMATE',
+            text: 'LEARN MORE',
             href: '#contact'
         }
-    }
+    },
 ];
 
 export function HeroSlider() {
@@ -119,8 +119,13 @@ export function HeroSlider() {
                         key={slide.id}
                         className={`slide ${index === currentSlide ? 'active' : ''}`}
                         style={{
-                            backgroundImage: `linear-gradient(rgba(0, 63, 107, 0.7), rgba(30, 64, 175, 0.8)), url(${slide.backgroundImage})`
-                        }}
+                            backgroundImage: `linear-gradient(
+                              rgba(0, 63, 107, 0.5), 
+                              rgba(30, 64, 175, 0.5)
+                            ), url(${slide.backgroundImage})`,
+                            backgroundSize: "cover",
+                            backgroundPosition: "center"
+                          }}                      
                     >
                         <div className="slide-overlay"></div>
                         <div className="slide-container">

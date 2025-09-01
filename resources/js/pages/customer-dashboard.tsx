@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Head, Link, router } from '@inertiajs/react';
+import { useState, useEffect } from 'react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { 
   Bell, 
   Calendar, 
@@ -25,153 +25,220 @@ import {
   Wrench,
   X
 } from 'lucide-react';
+import { 
+  customerApi, 
+  notificationsApi, 
+  handleApiError,
+  type DashboardData,
+  type BookingItem,
+  type NotificationItem
+} from '@/services/customerApi';
+import { SharedData } from '@/types';
 
-// Sample data - this would come from your backend
-const customerData = {
-  id: 1,
-  name: 'Juan Dela Cruz',
-  email: 'juan.delacruz@example.com',
-  phone: '+63 912 345 6789',
-  address: {
-    houseNumber: '123',
-    street: 'Main Street',
-    barangay: 'Poblacion',
-    municipality: 'Balanga',
-    province: 'Bataan'
-  },
-  profilePicture: null,
-  joinedDate: '2024-01-15'
-};
-
-const sampleBookings = [
-  {
-    id: 'BK001',
-    serviceType: 'AC Cleaning',
-    date: '2024-02-15',
-    time: '9:00 AM - 12:00 PM',
-    location: '123 Main St, Poblacion, Balanga, Bataan',
-    acType: 'Split Type',
-    units: 2,
-    brand: 'Daikin',
-    technician: 'Pedro Santos',
-    price: 1600,
-    status: 'assigned',
-    createdAt: '2024-02-10'
-  },
-  {
-    id: 'BK002',
-    serviceType: 'AC Repair',
-    date: '2024-01-28',
-    time: '2:00 PM - 5:00 PM',
-    location: '123 Main St, Poblacion, Balanga, Bataan',
-    acType: 'Window Type',
-    units: 1,
-    brand: 'LG',
-    technician: 'Miguel Garcia',
-    price: 1500,
-    status: 'completed',
-    createdAt: '2024-01-25'
-  },
-  {
-    id: 'BK003',
-    serviceType: 'AC Installation',
-    date: '2024-01-15',
-    time: '8:00 AM - 11:00 AM',
-    location: '123 Main St, Poblacion, Balanga, Bataan',
-    acType: 'Split Type',
-    units: 1,
-    brand: 'Carrier',
-    technician: 'Juan Dela Cruz',
-    price: 3000,
-    status: 'completed',
-    createdAt: '2024-01-10'
-  },
-  {
-    id: 'BK004',
-    serviceType: 'Freon Charging',
-    date: '2024-01-05',
-    time: '1:00 PM - 4:00 PM',
-    location: '123 Main St, Poblacion, Balanga, Bataan',
-    acType: 'Split Type',
-    units: 1,
-    brand: 'Samsung',
-    technician: 'Carlos Rodriguez',
-    price: 1200,
-    status: 'cancelled',
-    createdAt: '2024-01-02'
-  }
-];
-
-const sampleNotifications = [
-  {
-    id: 1,
-    type: 'booking',
-    title: 'Booking Confirmed',
-    message: 'Your AC Cleaning service for February 15, 2024 has been confirmed.',
-    date: '2024-02-10',
-    isRead: false
-  },
-  {
-    id: 2,
-    type: 'feedback',
-    title: 'Rate Your Service',
-    message: 'Please rate your AC Repair service completed on January 28, 2024.',
-    date: '2024-01-29',
-    isRead: false
-  },
-  {
-    id: 3,
-    type: 'promo',
-    title: 'Special Offer: 20% Off AC Cleaning',
-    message: 'Get 20% off your next AC cleaning service. Offer valid until March 15, 2024.',
-    date: '2024-02-08',
-    isRead: true
-  },
-  {
-    id: 4,
-    type: 'booking',
-    title: 'Service Completed',
-    message: 'Your AC Repair service has been completed successfully.',
-    date: '2024-01-28',
-    isRead: true
-  }
-];
-
+interface CustomerPageProps {
+  auth: {
+    user: {
+      id: number;
+      name: string;
+      email: string;
+      phone?: string;
+      province?: string;
+      city_municipality?: string;
+      barangay?: string;
+      house_no_street?: string;
+      created_at: string;
+      [key: string]: any;
+    };
+  };
+  [key: string]: any;
+}
 
 
 export default function CustomerDashboard() {
+  const { auth } = usePage<CustomerPageProps>().props;
   const [activeTab, setActiveTab] = useState('dashboard');
   const [bookingFilter, setBookingFilter] = useState('all');
   const [notificationFilter, setNotificationFilter] = useState('all');
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [showChatbot, setShowChatbot] = useState(false);
+  
+  // API Data State
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [allBookings, setAllBookings] = useState<BookingItem[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  
+  // Load initial data
+  useEffect(() => {
+    loadDashboardData();
+    loadNotifications();
+  }, []);
+  
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      const data = await customerApi.getDashboardData();
+      setDashboardData(data);
+      
+      // Also load full booking history for the bookings tab
+      const bookingsData = await customerApi.getBookingHistory({ per_page: 50 });
+      setAllBookings(bookingsData.data);
+    } catch (error) {
+      console.error('Error loading dashboard data:', handleApiError(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const loadNotifications = async () => {
+    try {
+      setNotificationsLoading(true);
+      const [notificationsData, unreadData] = await Promise.all([
+        notificationsApi.getNotifications({ per_page: 20 }),
+        notificationsApi.getUnreadCount()
+      ]);
+      setNotifications(notificationsData.data);
+      setUnreadCount(unreadData.unread_count);
+    } catch (error) {
+      console.error('Error loading notifications:', handleApiError(error));
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+  
+  const refreshBookings = async () => {
+    try {
+      setBookingsLoading(true);
+      const [dashboardData, bookingsData] = await Promise.all([
+        customerApi.getDashboardData(),
+        customerApi.getBookingHistory({ per_page: 50 })
+      ]);
+      setDashboardData(dashboardData);
+      setAllBookings(bookingsData.data);
+    } catch (error) {
+      console.error('Error refreshing bookings:', handleApiError(error));
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+  
+  const markNotificationAsRead = async (notificationId: number) => {
+    try {
+      await notificationsApi.markAsRead(notificationId);
+      setNotifications(prev => 
+        prev.map(notif => 
+          notif.id === notificationId 
+            ? { ...notif, is_read: true, read_at: new Date().toISOString() }
+            : notif
+        )
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Error marking notification as read:', handleApiError(error));
+    }
+  };
+  
+  const markAllNotificationsAsRead = async () => {
+    try {
+      await notificationsApi.markAllAsRead();
+      setNotifications(prev => 
+        prev.map(notif => ({ ...notif, is_read: true, read_at: new Date().toISOString() }))
+      );
+      setUnreadCount(0);
+    } catch (error) {
+      console.error('Error marking all notifications as read:', handleApiError(error));
+    }
+  };
 
   // Filter bookings based on selected filter
-  const filteredBookings = sampleBookings.filter(booking => {
+  const filteredBookings = allBookings.filter(booking => {
     if (bookingFilter === 'all') return true;
-    if (bookingFilter === 'your-bookings') return booking.status === 'assigned';
+    if (bookingFilter === 'your-bookings') return ['pending', 'confirmed', 'in_progress'].includes(booking.status);
     if (bookingFilter === 'completed') return booking.status === 'completed';
-    if (bookingFilter === 'cancelled') return booking.status === 'cancelled';
+    if (bookingFilter === 'cancelled') return ['cancelled', 'cancel_requested'].includes(booking.status);
     return true;
   });
 
   // Filter notifications based on selected filter
-  const filteredNotifications = sampleNotifications.filter(notification => {
+  const filteredNotifications = notifications.filter(notification => {
     if (notificationFilter === 'all') return true;
     return notification.type === notificationFilter;
   });
 
-  const unreadNotifications = sampleNotifications.filter(n => !n.isRead).length;
-  const upcomingBookings = sampleBookings.filter(b => b.status === 'assigned').length;
-  const recentBookings = sampleBookings.filter(b => b.status === 'completed').slice(0, 3);
+  // Calculate stats from real data
+  const recentBookings = dashboardData?.recent_bookings || [];
+  
+  // Helper function to get upcoming bookings count
+  const getUpcomingBookingsCount = () => {
+    const upcoming = dashboardData?.upcoming_bookings;
+    if (!upcoming) return 0;
+    
+    // If it's an array, return length
+    if (Array.isArray(upcoming)) {
+      return upcoming.length;
+    }
+    
+    // If it's an object, count the keys
+    if (typeof upcoming === 'object') {
+      return Object.keys(upcoming).length;
+    }
+    
+    return 0;
+  };
+  
+  const upcomingBookingsCount = getUpcomingBookingsCount();
 
   const handleSignOut = () => {
     router.post('/logout');
   };
 
-  const handleRequestCancellation = (bookingId: string) => {
-    alert(`Cancellation request submitted for booking ${bookingId}. We will contact you shortly.`);
+  const handleRequestCancellation = async (bookingNumber: string) => {
+    try {
+      // Show confirmation dialog
+      const confirmed = window.confirm(
+        'Are you sure you want to request cancellation for this booking? '
+        + 'Please note that cancellation requests must be made at least 24 hours before the scheduled service time.'
+      );
+      
+      if (!confirmed) {
+        return;
+      }
+
+      const result = await customerApi.requestCancellation(bookingNumber);
+      
+      if (result.success) {
+        // Success message
+        alert(`✅ ${result.message}`);
+        
+        // Refresh bookings to show updated status
+        await refreshBookings();
+      } else {
+        // Handle API errors
+        alert(`❌ ${result.error || 'Failed to submit cancellation request. Please try again.'}`);
+      }
+    } catch (error: any) {
+      console.error('Error requesting cancellation:', handleApiError(error));
+      
+      // Handle different error scenarios
+      if (error.response?.status === 400) {
+        const errorData = error.response.data;
+        let errorMessage = errorData.error || 'Cannot cancel this booking.';
+        
+        if (errorData.hours_remaining !== undefined) {
+          errorMessage += ` Hours remaining: ${Math.round(errorData.hours_remaining)}`;
+        }
+        
+        alert(`❌ ${errorMessage}`);
+      } else if (error.response?.status === 404) {
+        alert('❌ Booking not found.');
+      } else {
+        alert('❌ An error occurred while processing your cancellation request. Please try again later.');
+      }
+    }
   };
 
   const handleRateService = (bookingId: string) => {
@@ -180,18 +247,20 @@ export default function CustomerDashboard() {
     });
   };
 
-  const markAllAsRead = () => {
-    alert('All notifications marked as read');
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'assigned':
-        return 'status-assigned';
+      case 'pending':
+        return 'status-pending';
+      case 'confirmed':
+        return 'status-confirmed';
+      case 'in_progress':
+        return 'status-in-progress';
       case 'completed':
         return 'status-completed';
       case 'cancelled':
         return 'status-cancelled';
+      case 'cancel_requested':
+        return 'status-cancel-requested';
       default:
         return 'status-default';
     }
@@ -199,12 +268,18 @@ export default function CustomerDashboard() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'assigned':
+      case 'pending':
         return <Clock className="w-4 h-4" />;
+      case 'confirmed':
+        return <CheckCircle className="w-4 h-4" />;
+      case 'in_progress':
+        return <AlertCircle className="w-4 h-4" />;
       case 'completed':
         return <CheckCircle className="w-4 h-4" />;
       case 'cancelled':
         return <XCircle className="w-4 h-4" />;
+      case 'cancel_requested':
+        return <AlertCircle className="w-4 h-4" />;
       default:
         return <AlertCircle className="w-4 h-4" />;
     }
@@ -212,350 +287,474 @@ export default function CustomerDashboard() {
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'booking':
+      case 'booking_confirmation':
         return <Calendar className="w-5 h-5 text-blue-500" />;
-      case 'feedback':
+      case 'reminder':
+        return <Clock className="w-5 h-5 text-orange-500" />;
+      case 'status_update':
         return <MessageSquare className="w-5 h-5 text-green-500" />;
-      case 'promo':
+      case 'promotion':
         return <CreditCard className="w-5 h-5 text-purple-500" />;
       default:
         return <Bell className="w-5 h-5 text-gray-500" />;
     }
   };
 
-  const renderDashboard = () => (
-    <div className="customer-dashboard-content">
-      {/* Dashboard Overview Section */}
-    <div className="dashboard-overview">
-      {/* Left Side - Customer Information */}
-      <div className="dashboard-left">
-        <div className="info-card customer-info-compact">
-          <div className="card-header">
-            <h2 className="card-title">
-              <User className="w-5 h-5" />
-              Customer Information
-            </h2>
-            <button 
-              className="edit-btn"
-              onClick={() => setShowAccountSettings(true)}
-            >
-              <Settings className="w-4 h-4" />
-              Edit
-            </button>
-          </div>
-          <div className="customer-info-compact-grid">
-            <div className="info-item-compact">
-              <div className="info-icon">
-                <User className="w-4 h-4" />
-              </div>
-              <div className="info-details">
-                <span className="info-label">Full Name</span>
-                <span className="info-value">{customerData.name}</span>
-              </div>
-            </div>
-            <div className="info-item-compact">
-              <div className="info-icon">
-                <Phone className="w-4 h-4" />
-              </div>
-              <div className="info-details">
-                <span className="info-label">Contact Number</span>
-                <span className="info-value">{customerData.phone}</span>
-              </div>
-            </div>
-            <div className="info-item-compact">
-              <div className="info-icon">
-                <Mail className="w-4 h-4" />
-              </div>
-              <div className="info-details">
-                <span className="info-label">Email Address</span>
-                <span className="info-value">{customerData.email}</span>
-              </div>
-            </div>
-            <div className="info-item-compact">
-              <div className="info-icon">
-                <Home className="w-4 h-4" />
-              </div>
-              <div className="info-details">
-                <span className="info-label">Home Address</span>
-                <span className="info-value">
-                  {customerData.address.houseNumber} {customerData.address.street}, {customerData.address.barangay}, {customerData.address.municipality}, {customerData.address.province}
-                </span>
-              </div>
+  const renderDashboard = () => {
+    if (loading) {
+      return (
+        <div className="customer-dashboard-content">
+          <div className="dashboard-overview">
+            <div className="loading-state">
+              <div className="loading-spinner"></div>
+              <p>Loading dashboard...</p>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Right Side - Dashboard Stats */}
-      <div className="dashboard-right">
-        <div className="dashboard-stats-compact">
-          <div className="stat-card compact">
-            <div className="stat-icon upcoming">
-              <Calendar className="w-5 h-5" />
-            </div>
-            <div className="stat-info">
-              <span className="stat-number">{upcomingBookings}</span>
-              <span className="stat-label">Upcoming Bookings</span>
-            </div>
-          </div>
-          <div className="stat-card compact">
-            <div className="stat-icon completed">
-              <CheckCircle className="w-5 h-5" />
-            </div>
-            <div className="stat-info">
-              <span className="stat-number">{sampleBookings.filter(b => b.status === 'completed').length}</span>
-              <span className="stat-label">Completed Services</span>
-            </div>
-          </div>
-          <div className="stat-card compact">
-            <div className="stat-icon notifications">
-              <Bell className="w-5 h-5" />
-            </div>
-            <div className="stat-info">
-              <span className="stat-number">{unreadNotifications}</span>
-              <span className="stat-label">New Notifications</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="quick-actions-compact">
-          <div className="action-buttons-compact">
-            <button 
-              className="action-btn compact primary"
-              onClick={() => setActiveTab('bookings')}
-            >
-              <Eye className="w-4 h-4" />
-              View All Bookings
-            </button>
-            <Link href="/booking" className="action-btn compact secondary">
-              <Plus className="w-4 h-4" />
-              Book a Service
-            </Link>
-          </div>
-        </div>
-      </div>
-    </div>
-
-      {/* Recent Bookings */}
-      <div className="info-card recent-bookings-card">
-        <div className="card-header">
-          <h2 className="card-title">
-            <Clock className="w-5 h-5" />
-            Recent Booking History
-          </h2>
-          <button 
-            className="view-all-btn"
-            onClick={() => setActiveTab('bookings')}
-          >
-            View All
-          </button>
-        </div>
-        <div className="recent-bookings-list">
-          {recentBookings.map((booking) => (
-            <div key={booking.id} className="recent-booking-item">
-              <div className="booking-service">
-                <span className="service-type">{booking.serviceType}</span>
-                <span className="booking-date">{new Date(booking.date).toLocaleDateString()}</span>
+      );
+    }
+    
+    return (
+      <div className="customer-dashboard-content">
+        {/* Dashboard Overview Section */}
+        <div className="dashboard-overview">
+          {/* Left Side - Customer Information */}
+          <div className="dashboard-left">
+            <div className="info-card customer-info-compact">
+              <div className="card-header">
+                <h2 className="card-title">
+                  <User className="w-5 h-5" />
+                  Customer Information
+                </h2>
+                <button 
+                  className="edit-btn"
+                  onClick={() => setShowAccountSettings(true)}
+                >
+                  <Settings className="w-4 h-4" />
+                  Edit
+                </button>
               </div>
-              <div className="booking-status">
-                <span className={`status-badge ${getStatusColor(booking.status)}`}>
-                  {getStatusIcon(booking.status)}
-                  {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-
-    </div>
-  );
-
-  const renderBookings = () => (
-    <div className="customer-dashboard-content">
-      <div className="bookings-header">
-        <div className="bookings-title-section">
-          <h1 className="page-title">My Bookings</h1>
-          <Link href="/booking" className="book-service-btn">
-            <Plus className="w-5 h-5" />
-            Book a Service
-          </Link>
-        </div>
-        
-        {/* Booking Filters */}
-        <div className="booking-filters">
-          <button 
-            className={`filter-btn ${bookingFilter === 'all' ? 'active' : ''}`}
-            onClick={() => setBookingFilter('all')}
-          >
-            All Bookings
-          </button>
-          <button 
-            className={`filter-btn ${bookingFilter === 'your-bookings' ? 'active' : ''}`}
-            onClick={() => setBookingFilter('your-bookings')}
-          >
-            Your Bookings
-          </button>
-          <button 
-            className={`filter-btn ${bookingFilter === 'completed' ? 'active' : ''}`}
-            onClick={() => setBookingFilter('completed')}
-          >
-            Completed
-          </button>
-          <button 
-            className={`filter-btn ${bookingFilter === 'cancelled' ? 'active' : ''}`}
-            onClick={() => setBookingFilter('cancelled')}
-          >
-            Cancelled
-          </button>
-        </div>
-      </div>
-
-      {/* Bookings List */}
-      <div className="bookings-list">
-        {filteredBookings.map((booking) => (
-          <div key={booking.id} className="booking-card">
-            <div className="booking-card-header">
-              <div className="booking-id-section">
-                <span className="booking-id">#{booking.id}</span>
-                <span className={`status-badge ${getStatusColor(booking.status)}`}>
-                  {getStatusIcon(booking.status)}
-                  {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                </span>
-              </div>
-              <div className="booking-price">₱{booking.price.toLocaleString()}</div>
-            </div>
-            
-            <div className="booking-card-content">
-              <div className="booking-main-info">
-                <h3 className="service-type">{booking.serviceType}</h3>
-                <div className="booking-details-grid">
-                  <div className="detail-item">
-                    <Calendar className="w-4 h-4" />
-                    <span>{new Date(booking.date).toLocaleDateString()}</span>
-                  </div>
-                  <div className="detail-item">
-                    <Clock className="w-4 h-4" />
-                    <span>{booking.time}</span>
-                  </div>
-                  <div className="detail-item">
-                    <MapPin className="w-4 h-4" />
-                    <span>{booking.location}</span>
-                  </div>
-                  <div className="detail-item">
-                    <Wrench className="w-4 h-4" />
-                    <span>{booking.acType} - {booking.units} unit{booking.units > 1 ? 's' : ''}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="brand-label">Brand:</span>
-                    <span>{booking.brand}</span>
-                  </div>
-                  <div className="detail-item">
+              <div className="customer-info-compact-grid">
+                <div className="info-item-compact">
+                  <div className="info-icon">
                     <User className="w-4 h-4" />
-                    <span>Technician: {booking.technician}</span>
+                  </div>
+                  <div className="info-details">
+                    <span className="info-label">Full Name</span>
+                    <span className="info-value">{auth.user.name}</span>
+                  </div>
+                </div>
+                <div className="info-item-compact">
+                  <div className="info-icon">
+                    <Phone className="w-4 h-4" />
+                  </div>
+                  <div className="info-details">
+                    <span className="info-label">Contact Number</span>
+                    <span className="info-value">{auth.user.phone || 'Not provided'}</span>
+                  </div>
+                </div>
+                <div className="info-item-compact">
+                  <div className="info-icon">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <div className="info-details">
+                    <span className="info-label">Email Address</span>
+                    <span className="info-value">{auth.user.email}</span>
+                  </div>
+                </div>
+                <div className="info-item-compact">
+                  <div className="info-icon">
+                    <Home className="w-4 h-4" />
+                  </div>
+                  <div className="info-details">
+                    <span className="info-label">Home Address</span>
+                    <span className="info-value">
+                      {[auth.user.house_no_street, auth.user.barangay, auth.user.city_municipality, auth.user.province]
+                        .filter(Boolean)
+                        .join(', ') || 'Not provided'}
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
-            
-            <div className="booking-card-actions">
-              {booking.status === 'assigned' && (
+          </div>
+
+          {/* Right Side - Dashboard Stats */}
+          <div className="dashboard-right">
+            <div className="dashboard-stats-compact">
+              <div className="stat-card compact">
+                <div className="stat-icon upcoming">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div className="stat-info">
+                  <span className="stat-number">{upcomingBookingsCount}</span>
+                  <span className="stat-label">Upcoming Bookings</span>
+                </div>
+              </div>
+              <div className="stat-card compact">
+                <div className="stat-icon completed">
+                  <CheckCircle className="w-5 h-5" />
+                </div>
+                <div className="stat-info">
+                  <span className="stat-number">{dashboardData?.stats?.completed_bookings || 0}</span>
+                  <span className="stat-label">Completed Services</span>
+                </div>
+              </div>
+              <div className="stat-card compact">
+                <div className="stat-icon notifications">
+                  <Bell className="w-5 h-5" />
+                </div>
+                <div className="stat-info">
+                  <span className="stat-number">{unreadCount}</span>
+                  <span className="stat-label">New Notifications</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="quick-actions-compact">
+              <div className="action-buttons-compact">
                 <button 
-                  className="action-btn cancel"
-                  onClick={() => handleRequestCancellation(booking.id)}
+                  className="action-btn compact primary"
+                  onClick={() => setActiveTab('bookings')}
                 >
-                  Request Cancellation
+                  <Eye className="w-4 h-4" />
+                  View All Bookings
                 </button>
-              )}
-              {booking.status === 'completed' && (
-                <button 
-                  className="action-btn rate"
-                  onClick={() => handleRateService(booking.id)}
-                >
-                  <Star className="w-4 h-4" />
-                  Rate Service
-                </button>
-              )}
+                <Link href="/booking" className="action-btn compact secondary">
+                  <Plus className="w-4 h-4" />
+                  Book a Service
+                </Link>
+              </div>
             </div>
           </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  const renderNotifications = () => (
-    <div className="customer-dashboard-content">
-      <div className="notifications-header">
-        <h1 className="page-title">Notifications</h1>
-        <div className="notifications-actions">
-          <button 
-            className="mark-all-read-btn"
-            onClick={markAllAsRead}
-          >
-            Mark all as read
-          </button>
         </div>
-      </div>
 
-      {/* Notification Filters */}
-      <div className="notification-filters">
-        <button 
-          className={`filter-btn ${notificationFilter === 'all' ? 'active' : ''}`}
-          onClick={() => setNotificationFilter('all')}
-        >
-          <Filter className="w-4 h-4" />
-          All
-        </button>
-        <button 
-          className={`filter-btn ${notificationFilter === 'booking' ? 'active' : ''}`}
-          onClick={() => setNotificationFilter('booking')}
-        >
-          <Calendar className="w-4 h-4" />
-          Booking
-        </button>
-        <button 
-          className={`filter-btn ${notificationFilter === 'feedback' ? 'active' : ''}`}
-          onClick={() => setNotificationFilter('feedback')}
-        >
-          <MessageSquare className="w-4 h-4" />
-          Feedback
-        </button>
-        <button 
-          className={`filter-btn ${notificationFilter === 'promo' ? 'active' : ''}`}
-          onClick={() => setNotificationFilter('promo')}
-        >
-          <CreditCard className="w-4 h-4" />
-          Promo
-        </button>
-      </div>
-
-      {/* Notifications List */}
-      <div className="notifications-list">
-        {filteredNotifications.map((notification) => (
-          <div 
-            key={notification.id} 
-            className={`notification-card ${!notification.isRead ? 'unread' : ''}`}
-          >
-            <div className="notification-icon">
-              {getNotificationIcon(notification.type)}
-            </div>
-            <div className="notification-content">
-              <h3 className="notification-title">{notification.title}</h3>
-              <p className="notification-message">{notification.message}</p>
-              <span className="notification-date">
-                {new Date(notification.date).toLocaleDateString()}
-              </span>
-            </div>
-            {!notification.isRead && (
-              <div className="unread-indicator"></div>
+        {/* Recent Bookings */}
+        <div className="info-card recent-bookings-card">
+          <div className="card-header">
+            <h2 className="card-title">
+              <Clock className="w-5 h-5" />
+              Recent Booking History
+            </h2>
+            <button 
+              className="view-all-btn"
+              onClick={() => setActiveTab('bookings')}
+            >
+              View All
+            </button>
+          </div>
+          <div className="recent-bookings-list">
+            {recentBookings.length > 0 ? (
+              recentBookings.map((booking) => (
+                <div key={booking.id} className="recent-booking-item">
+                  <div className="booking-service">
+                    <span className="service-type">{booking.service}</span>
+                    <div className="booking-details">
+                      <span className="booking-date">{new Date(booking.scheduled_date).toLocaleDateString()}</span>
+                      <span className="booking-timeslot">{booking.timeslot}</span>
+                      {booking.technician_name && (
+                        <span className="technician-name">Technician: {booking.technician_name}</span>
+                      )}
+                      {booking.technician_phone && (
+                        <span className="technician-contact">Contact: {booking.technician_phone}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="booking-status">
+                    <span className={`status-badge ${getStatusColor(booking.status)}`}>
+                      {getStatusIcon(booking.status)}
+                      {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="no-bookings-message">
+                <p>No recent bookings found.</p>
+                <Link href="/booking" className="book-now-link">
+                  <Plus className="w-4 h-4" />
+                  Book your first service
+                </Link>
+              </div>
             )}
           </div>
-        ))}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
+
+  const renderBookings = () => {
+    if (bookingsLoading && allBookings.length === 0) {
+      return (
+        <div className="customer-dashboard-content">
+          <div className="loading-state">
+            <div className="loading-spinner"></div>
+            <p>Loading bookings...</p>
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="customer-dashboard-content">
+        <div className="bookings-header">
+          <div className="bookings-title-section">
+            <h1 className="page-title">My Bookings</h1>
+            <Link href="/booking" className="book-service-btn">
+              <Plus className="w-5 h-5" />
+              Book a Service
+            </Link>
+          </div>
+          
+          {/* Booking Filters */}
+          <div className="booking-filters">
+            <button 
+              className={`filter-btn ${bookingFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setBookingFilter('all')}
+              disabled={bookingsLoading}
+            >
+              All Bookings
+            </button>
+            <button 
+              className={`filter-btn ${bookingFilter === 'your-bookings' ? 'active' : ''}`}
+              onClick={() => setBookingFilter('your-bookings')}
+              disabled={bookingsLoading}
+            >
+              Upcoming
+            </button>
+            <button 
+              className={`filter-btn ${bookingFilter === 'completed' ? 'active' : ''}`}
+              onClick={() => setBookingFilter('completed')}
+              disabled={bookingsLoading}
+            >
+              Completed
+            </button>
+            <button 
+              className={`filter-btn ${bookingFilter === 'cancelled' ? 'active' : ''}`}
+              onClick={() => setBookingFilter('cancelled')}
+              disabled={bookingsLoading}
+            >
+              Cancelled
+            </button>
+          </div>
+        </div>
+
+        {/* Bookings List */}
+        <div className="bookings-list">
+          {filteredBookings.length > 0 ? (
+            filteredBookings.map((booking) => (
+              <div key={booking.id} className="booking-card">
+                <div className="booking-card-header">
+                  <div className="booking-id-section">
+                    <span className="booking-id">#{booking.booking_number}</span>
+                    <span className={`status-badge ${getStatusColor(booking.status)}`}>
+                      {getStatusIcon(booking.status)}
+                      {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                    </span>
+                  </div>
+                  <div className="booking-price">₱{booking.total_amount.toLocaleString()}</div>
+                </div>
+                
+                <div className="booking-card-content">
+                  <div className="booking-main-info">
+                    <h3 className="service-type">{booking.service}</h3>
+                    <div className="booking-details-grid">
+                      <div className="detail-item">
+                        <Calendar className="w-4 h-4" />
+                        <span>{new Date(booking.scheduled_date).toLocaleDateString()}</span>
+                      </div>
+                      <div className="detail-item">
+                        <Clock className="w-4 h-4" />
+                        <span>{booking.timeslot}</span>
+                      </div>
+                      <div className="detail-item">
+                        <MapPin className="w-4 h-4" />
+                        <span>{booking.service_location}</span>
+                      </div>
+                      <div className="detail-item">
+                        <Wrench className="w-4 h-4" />
+                        <span>{booking.aircon_type} - {booking.number_of_units} unit{booking.number_of_units > 1 ? 's' : ''}</span>
+                      </div>
+                      {booking.ac_brand && (
+                        <div className="detail-item">
+                          <span className="brand-label">Brand:</span>
+                          <span>{booking.ac_brand}</span>
+                        </div>
+                      )}
+                      <div className="detail-item">
+                        <User className="w-4 h-4" />
+                        <span>Technician: {booking.technician_name}</span>
+                      </div>
+                      {booking.technician_phone && (
+                        <div className="detail-item">
+                          <Phone className="w-4 h-4" />
+                          <span>Contact: {booking.technician_phone}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="booking-card-actions">
+                  {['pending', 'confirmed'].includes(booking.status) && (
+                    <button 
+                      className="action-btn cancel"
+                      onClick={() => handleRequestCancellation(booking.booking_number)}
+                    >
+                      Request Cancellation
+                    </button>
+                  )}
+                  {booking.status === 'cancel_requested' && (
+                    <div className="cancellation-status">
+                      <AlertCircle className="w-4 h-4 text-orange-500" />
+                      <span className="text-orange-600 font-medium">Cancellation Pending</span>
+                    </div>
+                  )}
+                  {booking.status === 'completed' && booking.can_review && (
+                    <button 
+                      className="action-btn rate"
+                      onClick={() => handleRateService(booking.id.toString())}
+                    >
+                      <Star className="w-4 h-4" />
+                      Rate Service
+                    </button>
+                  )}
+                  {booking.status === 'completed' && booking.has_review && (
+                    <div className="review-status">
+                      <Star className="w-4 h-4 text-yellow-500" />
+                      {booking.review_rating && (
+                        <span>Rated: {booking.review_rating}/5</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="no-bookings-message">
+              <p>No bookings found for the selected filter.</p>
+              <Link href="/booking" className="book-now-link">
+                <Plus className="w-4 h-4" />
+                Book a service
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderNotifications = () => {
+    if (notificationsLoading && notifications.length === 0) {
+      return (
+        <div className="customer-dashboard-content">
+          <div className="loading-state">
+            <div className="loading-spinner"></div>
+            <p>Loading notifications...</p>
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="customer-dashboard-content">
+        <div className="notifications-header">
+          <h1 className="page-title">Notifications</h1>
+          <div className="notifications-actions">
+            <button 
+              className="mark-all-read-btn"
+              onClick={markAllNotificationsAsRead}
+              disabled={unreadCount === 0 || notificationsLoading}
+            >
+              Mark all as read ({unreadCount})
+            </button>
+          </div>
+        </div>
+
+        {/* Notification Filters */}
+        <div className="notification-filters">
+          <button 
+            className={`filter-btn ${notificationFilter === 'all' ? 'active' : ''}`}
+            onClick={() => setNotificationFilter('all')}
+            disabled={notificationsLoading}
+          >
+            <Filter className="w-4 h-4" />
+            All
+          </button>
+          <button 
+            className={`filter-btn ${notificationFilter === 'booking_confirmation' ? 'active' : ''}`}
+            onClick={() => setNotificationFilter('booking_confirmation')}
+            disabled={notificationsLoading}
+          >
+            <Calendar className="w-4 h-4" />
+            Booking
+          </button>
+          <button 
+            className={`filter-btn ${notificationFilter === 'status_update' ? 'active' : ''}`}
+            onClick={() => setNotificationFilter('status_update')}
+            disabled={notificationsLoading}
+          >
+            <MessageSquare className="w-4 h-4" />
+            Updates
+          </button>
+          <button 
+            className={`filter-btn ${notificationFilter === 'promotion' ? 'active' : ''}`}
+            onClick={() => setNotificationFilter('promotion')}
+            disabled={notificationsLoading}
+          >
+            <CreditCard className="w-4 h-4" />
+            Promo
+          </button>
+        </div>
+
+        {/* Notifications List */}
+        <div className="notifications-list">
+          {filteredNotifications.length > 0 ? (
+            filteredNotifications.map((notification) => (
+              <div 
+                key={notification.id} 
+                className={`notification-card ${!notification.is_read ? 'unread' : ''}`}
+                onClick={() => {
+                  if (!notification.is_read) {
+                    markNotificationAsRead(notification.id);
+                  }
+                }}
+                style={{ cursor: !notification.is_read ? 'pointer' : 'default' }}
+              >
+                <div className="notification-icon">
+                  {getNotificationIcon(notification.type)}
+                </div>
+                <div className="notification-content">
+                  <h3 className="notification-title">{notification.title}</h3>
+                  <p className="notification-message">{notification.message}</p>
+                  <span className="notification-date">
+                    {notification.time_ago}
+                  </span>
+                </div>
+                {!notification.is_read && (
+                  <div className="unread-indicator"></div>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="no-notifications-message">
+              <Bell className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p>No notifications found.</p>
+              {notificationFilter !== 'all' && (
+                <button 
+                  className="clear-filter-btn"
+                  onClick={() => setNotificationFilter('all')}
+                >
+                  Clear filter
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderHelp = () => (
     <div className="customer-dashboard-content">
@@ -624,8 +823,8 @@ export default function CustomerDashboard() {
           <div className="profile-section">
             <div className="profile-picture-section">
               <div className="profile-picture">
-                {customerData.profilePicture ? (
-                  <img src={customerData.profilePicture} alt="Profile" />
+                {auth.user.avatar ? (
+                  <img src={auth.user.avatar} alt="Profile" />
                 ) : (
                   <User className="w-12 h-12" />
                 )}
@@ -639,7 +838,7 @@ export default function CustomerDashboard() {
                 <label>Full Name</label>
                 <input 
                   type="text" 
-                  value={customerData.name}
+                  value={auth.user.name}
                   disabled={!editingProfile}
                   className="profile-input"
                 />
@@ -661,7 +860,7 @@ export default function CustomerDashboard() {
               <label>Email Address</label>
               <input 
                 type="email" 
-                value={customerData.email}
+                value={auth.user.email}
                 disabled={!editingProfile}
                 className="profile-input"
               />
@@ -670,7 +869,7 @@ export default function CustomerDashboard() {
               <label>Mobile Phone</label>
               <input 
                 type="tel" 
-                value={customerData.phone}
+                value={auth.user.phone || ''}
                 disabled={!editingProfile}
                 className="profile-input"
               />
@@ -692,7 +891,7 @@ export default function CustomerDashboard() {
                 <label>House Number</label>
                 <input 
                   type="text" 
-                  value={customerData.address.houseNumber}
+                  value={auth.user.house_no_street || ''}
                   disabled={!editingProfile}
                   className="profile-input"
                 />
@@ -701,7 +900,7 @@ export default function CustomerDashboard() {
                 <label>Street</label>
                 <input 
                   type="text" 
-                  value={customerData.address.street}
+                  value={auth.user.house_no_street || ''}
                   disabled={!editingProfile}
                   className="profile-input"
                 />
@@ -712,7 +911,7 @@ export default function CustomerDashboard() {
                 <label>Barangay</label>
                 <input 
                   type="text" 
-                  value={customerData.address.barangay}
+                  value={auth.user.barangay || ''}
                   disabled={!editingProfile}
                   className="profile-input"
                 />
@@ -721,7 +920,7 @@ export default function CustomerDashboard() {
                 <label>Municipality</label>
                 <input 
                   type="text" 
-                  value={customerData.address.municipality}
+                  value={auth.user.city_municipality || ''}
                   disabled={!editingProfile}
                   className="profile-input"
                 />
@@ -814,7 +1013,7 @@ export default function CustomerDashboard() {
               </Link>
             </div>
             <div className="header-user">
-              <span className="user-welcome">Welcome, {customerData.name}</span>
+              <span className="user-welcome">Welcome, {auth.user.name}</span>
               <button 
                 className="header-sign-out-btn"
                 onClick={handleSignOut}
@@ -850,8 +1049,8 @@ export default function CustomerDashboard() {
             >
               <Bell className="w-5 h-5" />
               Notifications
-              {unreadNotifications > 0 && (
-                <span className="notification-count">{unreadNotifications}</span>
+              {unreadCount > 0 && (
+                <span className="notification-count">{unreadCount}</span>
               )}
             </button>
             <button 

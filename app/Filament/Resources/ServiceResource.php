@@ -38,8 +38,6 @@ class ServiceResource extends Resource
                     ->required()
                     ->numeric()
                     ->default(60),
-                Forms\Components\Toggle::make('requires_parts')
-                    ->required(),
                 Forms\Components\Toggle::make('is_active')
                     ->required(),
                 Forms\Components\TextInput::make('category')
@@ -61,8 +59,6 @@ class ServiceResource extends Resource
                 Tables\Columns\TextColumn::make('duration_minutes')
                     ->numeric()
                     ->sortable(),
-                Tables\Columns\IconColumn::make('requires_parts')
-                    ->boolean(),
                 Tables\Columns\IconColumn::make('is_active')
                     ->boolean(),
                 Tables\Columns\TextColumn::make('category')

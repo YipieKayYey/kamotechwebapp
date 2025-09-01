@@ -20,7 +20,7 @@ return new class extends Migration
             $table->decimal('commission_amount', 10, 2);
             $table->decimal('bonus_amount', 10, 2)->default(0);
             $table->decimal('total_amount', 10, 2);
-            $table->enum('payment_status', ['pending', 'paid'])->default('pending');
+            $table->enum('payment_status', ['pending', 'paid', 'unpaid'])->default('pending');
             $table->timestamp('paid_at')->nullable();
             $table->timestamps();
             
