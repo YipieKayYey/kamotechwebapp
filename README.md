@@ -75,12 +75,12 @@ Users (Customers, Technicians, Admins)
 
 ### **Core Business Logic**
 
-1. **🎯 Greedy Algorithm for Technician Selection** *(THESIS CONTRIBUTION)*:
-   - **Service Rating** (70%): Technician's performance on specific service type using category-based ratings
-   - **Availability** (30%): Current workload and schedule conflicts
-   - **Real-time scoring** with weighted formula: `SCORE = (ServiceRating × 0.70) + (Availability × 0.30)`
+1. **🎯 Pure Service-Rating Algorithm for Technician Selection** *(THESIS CONTRIBUTION)*:
+   - **Service Rating** (100%): Technician's performance on specific service type using category-based ratings
+   - **Pure expertise focus**: Prioritizes service quality over availability for optimal customer experience
+   - **Real-time scoring** with refined formula: `SCORE = ServiceRating × 1.00`
    - **Service-specific expertise** tracking with diversified technician profiles
-   - **Automatic optimal assignment** ensuring best customer experience
+   - **Automatic optimal assignment** ensuring best qualified technician for each service
 
 2. **Dynamic Pricing System**: 
    - Base service prices + AC type multipliers

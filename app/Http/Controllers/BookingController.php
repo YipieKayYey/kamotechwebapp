@@ -270,7 +270,7 @@ class BookingController extends Controller
                     'date' => $date,
                     'timeslot_id' => $timeslotId,
                     'technicians' => $technicianData,
-                    'algorithm_used' => 'Greedy Algorithm (70% Service Rating + 30% Availability)'
+                    'algorithm_used' => 'Pure Service-Rating Algorithm (100% Service Expertise)'
                 ]
             ]);
 

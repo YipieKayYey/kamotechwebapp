@@ -1104,8 +1104,8 @@ export default function Booking({
           {rankedTechnicians.length > 0 && (
             <div className="algorithm-info">
               <p className="algorithm-note">
-                ℹ️ <strong>How our AI ranking works:</strong> We use a Greedy Algorithm that combines service-specific ratings (70% weight) 
-                with real-time availability (30% weight) to find the best technician for your specific service.
+                ℹ️ <strong>How our AI ranking works:</strong> We use a Pure Service-Rating Algorithm that prioritizes technicians based on their 
+                expertise and performance ratings for your specific service type to ensure the highest quality results.
               </p>
             </div>
           )}
