@@ -1258,10 +1258,77 @@
     gap: 1rem;
 }
 
+.field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
 .address-row {
     display: grid;
     grid-template-columns: 1fr 2fr;
     gap: 1rem;
+}
+
+/* Address Alert Card */
+.address-alert-card {
+    background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+    border: 1.5px solid #f59e0b;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgba(245, 158, 11, 0.1);
+}
+
+.address-alert-card .alert-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.address-alert-card .alert-icon {
+    flex-shrink: 0;
+}
+
+.address-alert-card .alert-text {
+    flex: 1;
+    min-width: 200px;
+}
+
+.address-alert-card .alert-title {
+    font-weight: 600;
+    color: #92400e;
+    font-size: 0.95rem;
+    margin-bottom: 0.25rem;
+}
+
+.address-alert-card .alert-description {
+    font-size: 0.875rem;
+    color: #78350f;
+    opacity: 0.9;
+}
+
+.alert-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #083860;
+    color: white;
+    border: none;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.alert-action-btn:hover {
+    background: #0C5F8F;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .security-section {
@@ -1291,6 +1358,42 @@
     display: flex;
     gap: 1rem;
     margin-top: 1rem;
+}
+
+/* Error states */
+.profile-input.error {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.error-message {
+    color: #ef4444;
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+    display: block;
+}
+
+.address-error-message {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #dc2626;
+    padding: 0.75rem;
+    border-radius: 0.375rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.incomplete-badge {
+    background: #f59e0b;
+    color: white;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    margin-left: 0.5rem;
+    font-weight: 500;
 }
 
 .save-btn {
@@ -1930,6 +2033,10 @@
     }
     
     .address-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .field-row {
         grid-template-columns: 1fr;
     }
     

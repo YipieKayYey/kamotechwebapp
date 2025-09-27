@@ -2,7 +2,6 @@
 @import './about.css';
 @import './contact.css';
 @import './booking.css';
-@import './technician-dashboard.css';
 @import './standalone-customer-dashboard.css';
 
 /* Tailwind Theme Variables */
@@ -136,6 +135,17 @@
 body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+}
+
+/* Inputs - ensure native date picker icons are visible in dark mode */
+/* Dark mode: ensure datepicker icon is visible, keep native indicator clickable */
+.dark input[type="date"] {
+    color-scheme: dark;
+}
+
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) brightness(1.2);
+    opacity: 1;
 }
 
 /* Kamotech Custom Styles */
@@ -454,8 +464,8 @@ transition: all 0.3s ease;
 
 /* Navigation Styles */
 .kamotech-nav {
-    background: white;
-    border-bottom: 1px solid #e5e7eb;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
     position: sticky;
     top: 0;
     z-index: 50;
@@ -557,10 +567,10 @@ transition: all 0.3s ease;
     position: absolute;
     top: 100%;
     left: 0;
-    background: white;
+    background: var(--card);
     border-radius: 0.5rem;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--border);
     min-width: 200px;
     z-index: 50;
     padding: 0.5rem 0;
@@ -570,11 +580,11 @@ transition: all 0.3s ease;
 .nav-dropdown-link {
     display: block;
     padding: 0.75rem 1rem;
-    color: #374151;
+    color: var(--foreground);
     text-decoration: none;
     font-weight: 500;
     transition: all 0.2s;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid var(--border);
 }
 
 .nav-dropdown-link:last-child {
@@ -582,13 +592,13 @@ transition: all 0.3s ease;
 }
 
 .nav-dropdown-link:hover {
-    background-color: #f9fafb;
+    background-color: var(--muted);
     color: #083860;
 }
 
 .nav-link {
     text-decoration: none;
-    color: #374151;
+    color: var(--foreground);
     font-weight: 500;
     padding: 0.5rem 0;
     transition: color 0.2s;
@@ -656,8 +666,8 @@ transition: all 0.3s ease;
 }
 
 .nav-mobile {
-    background: white;
-    border-top: 1px solid #e5e7eb;
+    background: var(--card);
+    border-top: 1px solid var(--border);
     padding: 1rem;
     position: relative;
     z-index: 50;
@@ -674,9 +684,9 @@ transition: all 0.3s ease;
     display: block;
     padding: 0.75rem 0;
     text-decoration: none;
-    color: #374151;
+    color: var(--foreground);
     font-weight: 500;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid var(--border);
 }
 
 .nav-mobile-link:hover {

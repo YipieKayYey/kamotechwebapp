@@ -183,6 +183,55 @@
     background: var(--background);
     color: var(--foreground);
 }
+.units-stepper {
+    display: grid;
+    grid-template-columns: 44px 1fr 44px;
+    align-items: stretch;
+    gap: 8px;
+}
+
+.stepper-btn {
+    border: 1px solid var(--border);
+    background: var(--muted);
+    color: var(--foreground);
+    border-radius: var(--radius);
+    font-size: 1.25rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.15s ease, transform 0.05s ease;
+}
+
+.stepper-btn:hover:not(:disabled) {
+    background: var(--accent);
+}
+
+.stepper-btn:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+.stepper-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.stepper-input {
+    text-align: center;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.stepper-hint {
+    margin-top: 6px;
+    font-size: 0.8rem;
+    color: var(--muted-foreground);
+}
+
+.dark .stepper-btn {
+    background: var(--secondary);
+}
 
 .form-input:focus,
 .form-select:focus {
@@ -196,6 +245,78 @@
     background: var(--muted);
     color: var(--muted-foreground);
     cursor: not-allowed;
+}
+
+/* Dark mode: ensure inputs and selects are not white */
+.dark .form-input,
+.dark .form-select {
+    background: var(--card);
+    color: var(--foreground);
+    border-color: var(--border);
+}
+
+.dark .form-input::placeholder {
+    color: var(--muted-foreground);
+}
+
+/* Date Box Styles */
+.date-box {
+    transition: all 0.2s ease;
+}
+
+.date-box:hover {
+    border-color: #2563eb !important;
+    background: #f0f9ff !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+}
+
+.date-box:active {
+    transform: translateY(0);
+}
+
+/* Time Button Styles */
+.time-button {
+    transition: all 0.2s ease;
+}
+
+.time-button:not(:disabled):hover {
+    border-color: #2563eb !important;
+    background: #eff6ff !important;
+    color: #2563eb !important;
+    transform: scale(1.05);
+}
+
+.time-button:not(:disabled):active {
+    transform: scale(0.98);
+}
+
+/* Date and Time Selection Sections */
+.date-selection-section,
+.time-selection-section {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Date Navigation Buttons */
+.date-nav-button:not(:disabled):hover {
+    background: #f0f9ff !important;
+    border-color: #2563eb !important;
+    transform: scale(1.1);
+}
+
+.date-nav-button:not(:disabled):active {
+    transform: scale(0.95);
 }
 
 .form-input::placeholder {
@@ -665,6 +786,29 @@
     font-size: 0.8rem;
     color: var(--muted-foreground);
     font-style: italic;
+}
+
+/* Other Technicians Dropdown */
+.other-technicians-dropdown details[open] .dropdown-icon {
+    transform: rotate(90deg);
+}
+
+.other-technicians-dropdown summary::-webkit-details-marker {
+    display: none;
+}
+
+.other-technicians-dropdown summary:hover {
+    background: #f8fafc !important;
+}
+
+.technician-item.other-technician:hover {
+    border-color: #2563eb !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+}
+
+.technician-item.other-technician.selected {
+    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.2);
 }
 
 /* Booking Navigation */

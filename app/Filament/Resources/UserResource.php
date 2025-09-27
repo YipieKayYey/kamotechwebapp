@@ -26,57 +26,82 @@ class UserResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Basic Information')
+                Forms\Components\Section::make('Personal Information')
                     ->schema([
-                        Forms\Components\TextInput::make('name')
+                        Forms\Components\TextInput::make('first_name')
+                            ->label('First Name')
                             ->required()
                             ->maxLength(255),
+                        Forms\Components\TextInput::make('middle_initial')
+                            ->label('Middle Initial')
+                            ->maxLength(5),
+                        Forms\Components\TextInput::make('last_name')
+                            ->label('Last Name')
+                            ->required()
+                            ->maxLength(255),
+                        Forms\Components\DatePicker::make('date_of_birth')
+                            ->label('Date of Birth')
+                            ->displayFormat('M d, Y')
+                            ->maxDate(now()->subYears(18))
+                            ->required()
+                            ->placeholder('Select date of birth'),
+                    ])
+                    ->columns(3),
+
+                Forms\Components\Section::make('Contact Information')
+                    ->schema([
                         Forms\Components\TextInput::make('email')
                             ->email()
                             ->required()
                             ->maxLength(255),
+                        Forms\Components\TextInput::make('phone')
+                            ->tel()
+                            ->required()
+                            ->maxLength(255)
+                            ->placeholder('+63 917 123 4567'),
                         Forms\Components\TextInput::make('password')
                             ->password()
                             ->required()
                             ->maxLength(255)
                             ->visibleOn('create'),
-                        Forms\Components\TextInput::make('phone')
-                            ->tel()
-                            ->maxLength(255)
-                            ->placeholder('09123456789'),
                     ])
                     ->columns(2),
 
-                Forms\Components\Section::make('Contact & Address')
+                Forms\Components\Section::make('Address Information')
                     ->schema([
-                        Forms\Components\Textarea::make('address')
-                            ->label('Legacy Address (Optional)')
-                            ->rows(2)
-                            ->placeholder('For backward compatibility - leave empty if using structured address')
-                            ->helperText('Use structured address fields below for new/updated entries')
-                            ->columnSpanFull(),
-
-                        Forms\Components\TextInput::make('province')
+                        Forms\Components\Select::make('province')
                             ->label('Province')
-                            ->placeholder('e.g., Bataan')
-                            ->helperText('Enter province name'),
-
-                        Forms\Components\TextInput::make('city_municipality')
+                            ->searchable()
+                            ->preload()
+                            ->options(fn () => \App\Models\Province::orderBy('name')->pluck('name', 'id')->toArray())
+                            ->reactive()
+                            ->required(),
+                        Forms\Components\Select::make('city_municipality')
                             ->label('City/Municipality')
-                            ->placeholder('e.g., Balanga City, Hermosa')
-                            ->helperText('Enter city or municipality name'),
-
-                        Forms\Components\TextInput::make('barangay')
+                            ->searchable()
+                            ->preload()
+                            ->options(function (callable $get) {
+                                $provinceId = $get('province');
+                                if (! $provinceId) { return []; }
+                                return \App\Models\City::where('province_id', $provinceId)->orderBy('name')->pluck('name', 'id')->toArray();
+                            })
+                            ->reactive()
+                            ->required(),
+                        Forms\Components\Select::make('barangay')
                             ->label('Barangay')
-                            ->placeholder('e.g., Central, Poblacion')
-                            ->helperText('Enter barangay name'),
-
+                            ->searchable()
+                            ->preload()
+                            ->options(function (callable $get) {
+                                $cityId = $get('city_municipality');
+                                if (! $cityId) { return []; }
+                                return \App\Models\Barangay::where('city_id', $cityId)->orderBy('name')->pluck('name', 'id')->toArray();
+                            })
+                            ->required(),
                         Forms\Components\TextInput::make('house_no_street')
                             ->label('House No. & Street')
-                            ->placeholder('e.g., 123 Rizal Street')
-                            ->helperText('Enter house number and street name')
+                            ->required()
+                            ->maxLength(255)
                             ->columnSpanFull(),
-
                     ])
                     ->columns(3),
 
@@ -84,18 +109,15 @@ class UserResource extends Resource
                     ->schema([
                         Forms\Components\Select::make('role')
                             ->options([
-                                'customer' => 'Customer',
                                 'technician' => 'Technician',
                                 'admin' => 'Admin',
                             ])
                             ->required()
-                            ->default('customer'),
+                            ->default('technician')
+                            ->helperText('Admin panel is for internal staff only. Customers register through the website.'),
                         Forms\Components\Toggle::make('is_active')
                             ->label('Account Active')
                             ->default(true),
-                        Forms\Components\DateTimePicker::make('email_verified_at')
-                            ->label('Email Verified At')
-                            ->displayFormat('M d, Y H:i'),
                         Forms\Components\FileUpload::make('avatar')
                             ->label('Profile Picture')
                             ->image()
@@ -110,51 +132,68 @@ class UserResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')
-                    ->searchable(),
+                Tables\Columns\TextColumn::make('full_name')
+                    ->label('Name')
+                    ->getStateUsing(fn ($record) => $record->full_name)
+                    ->searchable(query: function ($query, string $search): void {
+                        $query->where(function ($q) use ($search) {
+                            $q->where('first_name', 'like', "%{$search}%")
+                                ->orWhere('middle_initial', 'like', "%{$search}%")
+                                ->orWhere('last_name', 'like', "%{$search}%");
+                        });
+                    })
+                    ->sortable(query: function ($query, string $direction): void {
+                        $query->orderBy('last_name', $direction)
+                            ->orderBy('first_name', $direction);
+                    }),
                 Tables\Columns\TextColumn::make('email')
                     ->searchable(),
+                Tables\Columns\TextColumn::make('phone')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('full_address')
+                    ->label('Address')
+                    ->getStateUsing(fn ($record) => $record->full_address)
+                    ->wrap()
+                    ->limit(50)
+                    ->tooltip(fn ($record) => $record->full_address),
+                Tables\Columns\TextColumn::make('role')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'admin' => 'danger',
+                        'technician' => 'warning',
+                        'customer' => 'success',
+                    }),
+                Tables\Columns\IconColumn::make('is_active')
+                    ->label('Active')
+                    ->boolean(),
+                Tables\Columns\TextColumn::make('date_of_birth')
+                    ->date()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('email_verified_at')
                     ->dateTime()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('phone')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('formatted_address')
-                    ->label('Address')
-                    ->searchable(['address', 'province', 'city_municipality', 'barangay', 'house_no_street'])
-                    ->sortable()
-                    ->limit(40)
-                    ->tooltip(function ($record) {
-                        return $record->formatted_address;
-                    }),
-                Tables\Columns\TextColumn::make('city_municipality')
-                    ->label('City')
-                    ->searchable()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('role'),
-                Tables\Columns\IconColumn::make('is_active')
-                    ->boolean(),
-                Tables\Columns\TextColumn::make('avatar')
-                    ->searchable(),
             ])
             ->filters([
-                //
+                Tables\Filters\SelectFilter::make('role')
+                    ->label('Filter by Role')
+                    ->options([
+                        'admin' => 'Admin',
+                        'technician' => 'Technician',
+                        'customer' => 'Customer',
+                    ]),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    // Delete actions disabled as per panelist requirement
                 ]),
             ]);
     }

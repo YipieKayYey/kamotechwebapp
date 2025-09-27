@@ -50,5 +50,7 @@
     </head>
     <body class="font-sans antialiased">
         @inertia
+        <script src="https://cdn.botpress.cloud/webchat/v3.3/inject.js"></script>
+        <script src="https://files.bpcontent.cloud/2025/09/16/09/20250916095022-XIYN7T2M.js" defer></script>
     </body>
 </html>

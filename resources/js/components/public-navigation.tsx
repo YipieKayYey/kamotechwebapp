@@ -1,9 +1,12 @@
-import { Link } from '@inertiajs/react';
-import { Menu, X, ChevronDown } from 'lucide-react';
+import { Link, usePage, router } from '@inertiajs/react';
+import { Menu, X, ChevronDown, LogOut } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { route } from 'ziggy-js';
+import { type SharedData } from '@/types';
+import React from 'react';
 
 export function PublicNavigation() {
+    const { auth } = usePage<SharedData>().props;
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isServicesDropdownOpen, setIsServicesDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLLIElement>(null);
@@ -108,15 +111,43 @@ export function PublicNavigation() {
                     </ul>
                     
                     <div className="nav-auth">
-                        {/*<Link href={route('booking')} className="nav-auth-link book-now-link">
-                            Book Now
-                        </Link>*/}
-                        <Link href={route('login')} className="nav-auth-link login-link">
-                            Log in
-                        </Link>
-                        <Link href={route('register')} className="nav-auth-link signup-link">
-                            Sign up
-                        </Link>
+                        {auth.user ? (
+                            <>
+                                <span className="nav-auth-welcome" style={{ 
+                                    color: '#374151', 
+                                    fontSize: '14px',
+                                    marginRight: '1rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    fontWeight: '500'
+                                }}>
+                                    Welcome, {auth.user.name}
+                                </span>
+                                <Link 
+                                    href={route('customer-dashboard')}
+                                    className="nav-auth-link signup-link"
+                                >
+                                    Dashboard
+                                </Link>
+                                <button 
+                                    onClick={() => router.post(route('logout'))}
+                                    className="nav-auth-link signup-link" 
+                                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                                >
+                                    <LogOut size={16} />
+                                    Sign Out
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <Link href={route('login')} className="nav-auth-link login-link">
+                                    Log in
+                                </Link>
+                                <Link href={route('register')} className="nav-auth-link signup-link">
+                                    Sign up
+                                </Link>
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -175,15 +206,42 @@ export function PublicNavigation() {
                     </ul>
                     
                     <div className="nav-mobile-auth">
-                        {/*<Link href={route('booking')} className="nav-mobile-auth-link book-now-link">
-                            Book Now
-                        </Link>*/}
-                        <Link href={route('login')} className="nav-mobile-auth-link login-link">
-                            Log in
-                        </Link>
-                        <Link href={route('register')} className="nav-mobile-auth-link signup-link">
-                            Sign up
-                        </Link>
+                        {auth.user ? (
+                            <>
+                                <span className="nav-mobile-welcome" style={{ 
+                                    color: '#374151', 
+                                    fontSize: '14px',
+                                    marginBottom: '0.5rem',
+                                    display: 'block',
+                                    textAlign: 'center',
+                                    fontWeight: '500'
+                                }}>
+                                    Welcome, {auth.user.name}
+                                </span>
+                                <Link 
+                                    href={route('customer-dashboard')}
+                                    className="nav-mobile-auth-link signup-link"
+                                    onClick={() => setIsMenuOpen(false)}
+                                >
+                                    Dashboard
+                                </Link>
+                                <button 
+                                    onClick={() => router.post(route('logout'))}
+                                    className="nav-mobile-auth-link signup-link"
+                                >
+                                    Sign Out
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <Link href={route('login')} className="nav-mobile-auth-link login-link">
+                                    Log in
+                                </Link>
+                                <Link href={route('register')} className="nav-mobile-auth-link signup-link">
+                                    Sign up
+                                </Link>
+                            </>
+                        )}
                     </div>
                 </div>
             )}

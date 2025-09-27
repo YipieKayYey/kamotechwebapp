@@ -3,6 +3,7 @@
 namespace App\Filament\Technician\Resources;
 
 use App\Models\Earning;
+use Carbon\Carbon;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -16,9 +17,9 @@ class MyEarningsResource extends Resource
     protected static ?string $model = Earning::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
-    
+
     protected static ?string $navigationLabel = 'My Earnings';
-    
+
     protected static ?string $title = 'My Earnings';
 
     protected static ?int $navigationSort = 2;
@@ -28,7 +29,7 @@ class MyEarningsResource extends Resource
         $user = Auth::user();
         $technician = $user->technician;
 
-        if (!$technician) {
+        if (! $technician) {
             return parent::getEloquentQuery()->whereRaw('1 = 0'); // Return empty query
         }
 
@@ -42,7 +43,7 @@ class MyEarningsResource extends Resource
         $user = Auth::user();
         $technician = $user->technician;
 
-        if (!$technician) {
+        if (! $technician) {
             return null;
         }
 
@@ -86,7 +87,7 @@ class MyEarningsResource extends Resource
                             ->label('Job Date')
                             ->disabled()
                             ->dehydrated(false)
-                            ->formatStateUsing(fn ($record) => $record->booking?->scheduled_date?->format('M j, Y')),
+                            ->formatStateUsing(fn ($record) => $record->booking?->scheduled_start_at?->format('M j, Y')),
                     ])
                     ->columns(2),
 
@@ -183,7 +184,7 @@ class MyEarningsResource extends Resource
                     ->colors([
                         'warning' => 'pending',
                         'success' => 'paid',
-                        'danger' => 'cancelled',
+                        'danger' => ['unpaid', 'cancelled'],
                     ]),
 
                 Tables\Columns\TextColumn::make('paid_at')
@@ -197,17 +198,88 @@ class MyEarningsResource extends Resource
                     ->label('Payment Status')
                     ->options([
                         'pending' => 'Pending',
+                        'unpaid' => 'Unpaid',
                         'paid' => 'Paid',
-                        'cancelled' => 'Cancelled',
                     ]),
 
-                Tables\Filters\Filter::make('this_month')
-                    ->query(fn (Builder $query): Builder => $query->whereMonth('created_at', now()->month))
-                    ->label('This Month'),
+                Tables\Filters\Filter::make('this_week')
+                    ->label('This Week')
+                    ->query(fn (Builder $query): Builder => $query->whereHas('booking', function ($q) {
+                        $q->whereBetween('scheduled_start_at', [
+                            Carbon::now()->startOfWeek(),
+                            Carbon::now()->endOfWeek(),
+                        ]);
+                    })),
 
-                Tables\Filters\Filter::make('last_30_days')
-                    ->query(fn (Builder $query): Builder => $query->where('created_at', '>=', now()->subDays(30)))
-                    ->label('Last 30 Days'),
+                Tables\Filters\Filter::make('last_week')
+                    ->label('Last Week')
+                    ->query(fn (Builder $query): Builder => $query->whereHas('booking', function ($q) {
+                        $q->whereBetween('scheduled_start_at', [
+                            Carbon::now()->subWeek()->startOfWeek(),
+                            Carbon::now()->subWeek()->endOfWeek(),
+                        ]);
+                    })),
+
+                Tables\Filters\Filter::make('this_month')
+                    ->label('This Month')
+                    ->query(fn (Builder $query): Builder => $query->whereHas('booking', function ($q) {
+                        $q->whereMonth('scheduled_start_at', Carbon::now()->month)
+                            ->whereYear('scheduled_start_at', Carbon::now()->year);
+                    })),
+
+                Tables\Filters\Filter::make('last_month')
+                    ->label('Last Month')
+                    ->query(fn (Builder $query): Builder => $query->whereHas('booking', function ($q) {
+                        $q->whereMonth('scheduled_start_at', Carbon::now()->subMonth()->month)
+                            ->whereYear('scheduled_start_at', Carbon::now()->subMonth()->year);
+                    })),
+
+                Tables\Filters\Filter::make('this_year')
+                    ->label('This Year')
+                    ->query(fn (Builder $query): Builder => $query->whereHas('booking', function ($q) {
+                        $q->whereYear('scheduled_start_at', Carbon::now()->year);
+                    })),
+
+                Tables\Filters\Filter::make('last_year')
+                    ->label('Last Year')
+                    ->query(fn (Builder $query): Builder => $query->whereHas('booking', function ($q) {
+                        $q->whereYear('scheduled_start_at', Carbon::now()->subYear()->year);
+                    })),
+
+                Tables\Filters\Filter::make('created_at')
+                    ->label('Custom Date Range')
+                    ->form([
+                        Forms\Components\DatePicker::make('created_from')
+                            ->label('From'),
+                        Forms\Components\DatePicker::make('created_until')
+                            ->label('Until'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['created_from'],
+                                fn (Builder $query, $date): Builder => $query->whereHas('booking', function ($q) use ($date) {
+                                    $q->whereDate('scheduled_start_at', '>=', $date);
+                                }),
+                            )
+                            ->when(
+                                $data['created_until'],
+                                fn (Builder $query, $date): Builder => $query->whereHas('booking', function ($q) use ($date) {
+                                    $q->whereDate('scheduled_start_at', '<=', $date);
+                                }),
+                            );
+                    })
+                    ->indicateUsing(function (array $data): array {
+                        $indicators = [];
+                        if ($data['created_from'] ?? null) {
+                            $indicators['created_from'] = 'From '.Carbon::parse($data['created_from'])->toFormattedDateString();
+                        }
+                        if ($data['created_until'] ?? null) {
+                            $indicators['created_until'] = 'Until '.Carbon::parse($data['created_until'])->toFormattedDateString();
+                        }
+
+                        return $indicators;
+                    }),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make()

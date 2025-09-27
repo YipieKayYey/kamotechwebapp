@@ -16,9 +16,9 @@ class RatingReviewSeeder extends Seeder
      */
     public function run(): void
     {
-        // Get all completed bookings
+        // Get all completed bookings (including guest bookings)
         $completedBookings = Booking::where('status', 'completed')
-            ->with(['customer', 'technician.user', 'service'])
+            ->with(['customer', 'guestCustomer', 'technician.user', 'service'])
             ->get();
 
         // Get review categories
@@ -40,6 +40,11 @@ class RatingReviewSeeder extends Seeder
                 echo "  ⚠️  Skipping booking {$booking->booking_number} - no technician assigned\n";
 
                 continue;
+            }
+
+            // Skip guest bookings without customer_id (guest reviews not supported yet)
+            if (! $booking->customer_id && $booking->guest_customer_id) {
+                continue; // Silently skip guest bookings for now
             }
 
             // Not all customers leave reviews (about 75% review rate)
@@ -94,7 +99,8 @@ class RatingReviewSeeder extends Seeder
     private function getTechnicianProfiles(): array
     {
         return [
-            1 => [ // Pedro Mendoza - Cleaning/Maintenance Specialist
+            'KMT-001' => [ // Pedro M. Santos - Cleaning/Maintenance Specialist
+                'name' => 'Pedro M. Santos',
                 'strengths' => ['Cleanliness', 'Work Quality'],
                 'weaknesses' => ['Tools'],
                 'base_ratings' => [
@@ -105,7 +111,8 @@ class RatingReviewSeeder extends Seeder
                     'Tools' => 3.9,
                 ],
             ],
-            2 => [ // Maria Garcia - Installation Expert
+            'KMT-002' => [ // Jonathan L. Rumbawa - Installation Expert
+                'name' => 'Jonathan L. Rumbawa',
                 'strengths' => ['Work Quality', 'Tools'],
                 'weaknesses' => ['Punctuality'],
                 'base_ratings' => [
@@ -116,7 +123,8 @@ class RatingReviewSeeder extends Seeder
                     'Tools' => 4.8,
                 ],
             ],
-            3 => [ // Jose Cruz - Repair Specialist
+            'KMT-003' => [ // Jose W. Cruz - Repair Specialist
+                'name' => 'Jose W. Cruz',
                 'strengths' => ['Work Quality', 'Tools'],
                 'weaknesses' => ['Cleanliness', 'Attitude'],
                 'base_ratings' => [
@@ -127,7 +135,8 @@ class RatingReviewSeeder extends Seeder
                     'Tools' => 4.7,
                 ],
             ],
-            4 => [ // Ana Reyes - All-rounder Expert
+            'KMT-004' => [ // John Carl V. Concha - All-rounder Expert
+                'name' => 'John Carl V. Concha',
                 'strengths' => ['Work Quality', 'Attitude', 'Punctuality'],
                 'weaknesses' => [],
                 'base_ratings' => [
@@ -138,7 +147,8 @@ class RatingReviewSeeder extends Seeder
                     'Tools' => 4.5,
                 ],
             ],
-            5 => [ // Carlos - Chemical/Freon Specialist
+            'KMT-005' => [ // Carlos D. Mendoza - Chemical/Freon Specialist
+                'name' => 'Carlos D. Mendoza',
                 'strengths' => ['Tools', 'Work Quality'],
                 'weaknesses' => ['Punctuality'],
                 'base_ratings' => [
@@ -157,8 +167,14 @@ class RatingReviewSeeder extends Seeder
      */
     private function generateCategoryScore($technicianId, $serviceName, $categoryName): int
     {
+        // Get technician by database ID to find employee_id
+        $technician = Technician::find($technicianId);
+        if (! $technician) {
+            return rand(3, 5); // Default random score
+        }
+
         $profiles = $this->getTechnicianProfiles();
-        $profile = $profiles[$technicianId] ?? null;
+        $profile = $profiles[$technician->employee_id] ?? null;
 
         if (! $profile) {
             return rand(3, 5); // Default random score
@@ -167,7 +183,7 @@ class RatingReviewSeeder extends Seeder
         $baseRating = $profile['base_ratings'][$categoryName] ?? 4.0;
 
         // Adjust based on service type and technician specialization
-        $serviceAdjustment = $this->getServiceAdjustment($technicianId, $serviceName, $categoryName);
+        $serviceAdjustment = $this->getServiceAdjustment($technician->employee_id, $serviceName, $categoryName);
         $adjustedRating = $baseRating + $serviceAdjustment;
 
         // Convert to 1-5 integer score with some randomness
@@ -183,41 +199,41 @@ class RatingReviewSeeder extends Seeder
     /**
      * Get service-specific adjustment for category scores
      */
-    private function getServiceAdjustment($technicianId, $serviceName, $categoryName): float
+    private function getServiceAdjustment($employeeId, $serviceName, $categoryName): float
     {
         $adjustments = [
             // Pedro specializes in cleaning - gets bonus for cleaning services
-            1 => [
+            'KMT-001' => [
                 'AC Cleaning' => ['Cleanliness' => 0.6, 'Work Quality' => 0.4],
                 'AC Maintenance' => ['Cleanliness' => 0.3, 'Work Quality' => 0.2],
                 'AC Installation' => ['Work Quality' => -0.5, 'Tools' => -0.3],
             ],
-            // Maria specializes in installation
-            2 => [
+            // Jonathan specializes in installation
+            'KMT-002' => [
                 'AC Installation' => ['Work Quality' => 0.5, 'Tools' => 0.4],
                 'AC Relocation' => ['Work Quality' => 0.3, 'Tools' => 0.3],
                 'AC Cleaning' => ['Work Quality' => -0.2],
             ],
             // Jose specializes in repair
-            3 => [
+            'KMT-003' => [
                 'AC Repair' => ['Work Quality' => 0.4, 'Tools' => 0.3],
                 'Repiping Service' => ['Work Quality' => 0.5, 'Tools' => 0.4],
                 'Freon Charging' => ['Work Quality' => 0.3, 'Tools' => 0.2],
                 'AC Troubleshooting' => ['Attitude' => -0.3], // Not great at diagnosis
             ],
-            // Ana is good at everything
-            4 => [
+            // John Carl is good at everything
+            'KMT-004' => [
                 'AC Troubleshooting' => ['Work Quality' => 0.5, 'Attitude' => 0.3],
                 // Small bonus across all services
             ],
             // Carlos specializes in chemical work
-            5 => [
+            'KMT-005' => [
                 'Freon Charging' => ['Work Quality' => 0.4, 'Tools' => 0.5],
                 'Repiping Service' => ['Work Quality' => 0.3, 'Tools' => 0.3],
             ],
         ];
 
-        return $adjustments[$technicianId][$serviceName][$categoryName] ?? 0;
+        return $adjustments[$employeeId][$serviceName][$categoryName] ?? 0;
     }
 
     private function generateReviewText($overallRating, $booking): string

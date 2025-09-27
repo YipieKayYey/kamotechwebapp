@@ -2,244 +2,182 @@
 
 namespace App\Services;
 
-use App\Models\Technician;
 use App\Models\Booking;
-use App\Models\Timeslot;
+use App\Models\Technician;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 /**
  * TechnicianAvailabilityService for KAMOTECH
- * 
- * Handles real-time technician availability checking for the booking system.
- * This is crucial for showing "X technicians available" per timeslot.
- * 
- * Key Features:
- * - Real-time availability checking per date/timeslot
- * - Multi-day booking conflict detection  
- * - Availability matrix generation for calendar views
- * - Smart scheduling with workload limits
+ *
+ * Simplified availability service using standard schedule:
+ * - All technicians work 7 days a week (Sunday-Saturday) 
+ * - Standard hours: 8:00 AM - 5:00 PM
+ * - Availability controlled by simple is_available toggle
+ * - Perfect for commission-based business model
  */
 class TechnicianAvailabilityService
 {
+    // Standard work schedule - all technicians work the same hours
+    const WORK_START = '08:00:00';
+    const WORK_END = '17:00:00';
+    
     /**
-     * Get the number of available technicians for a specific date and timeslot
-     * 
-     * @param string $date Date in Y-m-d format
-     * @param int|null $timeslotId Specific timeslot ID (null = any timeslot)
-     * @return int Number of available technicians
+     * Backward-compatible wrapper: count available technicians for a given date.
+     * Uses full workday window (08:00–17:00).
      */
-    public function getAvailableTechniciansCount(string $date, ?int $timeslotId = null): int
+    public function getAvailableTechniciansCount(string $date, ?int $unused = null): int
     {
-        return $this->getAvailableTechniciansForDate($date, $timeslotId)->count();
+        $startAt = Carbon::parse($date.' '.self::WORK_START)->format('Y-m-d H:i:s');
+        $endAt = Carbon::parse($date.' '.self::WORK_END)->format('Y-m-d H:i:s');
+
+        return $this->getAvailableTechniciansCountForWindow($startAt, $endAt);
     }
 
     /**
-     * Get collection of available technicians for a specific date and timeslot
-     * 
-     * @param string $date Date in Y-m-d format  
-     * @param int|null $timeslotId Specific timeslot ID
-     * @return Collection Available technicians
+     * Get available technicians count for a specific time window
      */
-    public function getAvailableTechniciansForDate(string $date, ?int $timeslotId = null): Collection
+    public function getAvailableTechniciansCountForWindow(string $startAt, string $endAt): int
     {
-        $dateObj = Carbon::parse($date);
-        $dayOfWeek = $dateObj->dayOfWeek; // 0 = Sunday, 6 = Saturday
+        return $this->getAvailableTechniciansForWindow($startAt, $endAt)->count();
+    }
 
-        // Get all active technicians
+    /**
+     * Get available technicians for a specific time window
+     * 
+     * Simplified logic:
+     * 1. Check if technician is_available = true
+     * 2. Check if requested time overlaps with standard work hours (8am-5pm)
+     * 3. Check if technician has no conflicting bookings
+     */
+    public function getAvailableTechniciansForWindow(string $startAt, string $endAt): Collection
+    {
+        $start = Carbon::parse($startAt);
+        $end = Carbon::parse($endAt);
+
+        // Get all active technicians (simplified - no need to load availability relationship)
         $allTechnicians = Technician::available()
-            ->with(['user', 'availability'])
+            ->with(['user'])
             ->get();
 
-        // Filter by day-of-week availability and timeslot overlap
-        $availableBySchedule = $allTechnicians->filter(function ($technician) use ($dayOfWeek, $timeslotId) {
-            $dayAvailability = $technician->availability
-                ->where('day_of_week', $dayOfWeek)
-                ->where('is_available', true)
-                ->first();
-                
-            if (!$dayAvailability) {
-                return false; // Not available on this day
-            }
-            
-            // If no specific timeslot requested, just check day availability
-            if (!$timeslotId) {
-                return true;
-            }
-            
-            // Check if technician's work hours overlap with requested timeslot
-            $timeslot = Timeslot::find($timeslotId);
-            if (!$timeslot) {
-                return false;
-            }
-            
-            return $this->timesOverlap(
-                $dayAvailability->start_time, 
-                $dayAvailability->end_time,
-                $timeslot->start_time,
-                $timeslot->end_time
-            );
-        });
+        // Check if requested window overlaps with standard work hours (8am-5pm)
+        $workHoursOverlap = $this->timesOverlap(
+            self::WORK_START,
+            self::WORK_END,
+            $start->format('H:i:s'),
+            $end->format('H:i:s')
+        );
 
-        // Get technicians blocked by existing bookings (including multi-day)
-        $blockedTechnicians = $this->getBlockedTechniciansForDate($date, $timeslotId);
-
-        // Get technicians who are at their daily job limit
-        $overloadedTechnicians = $this->getOverloadedTechniciansForDate($date);
-
-        // Remove blocked and overloaded technicians
-        return $availableBySchedule->whereNotIn('id', $blockedTechnicians->merge($overloadedTechnicians));
-    }
-
-    /**
-     * Get technicians blocked by existing bookings on a specific date
-     * 
-     * @param string $date Date to check
-     * @param int|null $timeslotId Specific timeslot (null = any timeslot)
-     * @return Collection Blocked technician IDs
-     */
-    private function getBlockedTechniciansForDate(string $date, ?int $timeslotId = null): Collection
-    {
-        $query = Booking::where('status', '!=', 'cancelled')
-            ->where('status', '!=', 'completed') // Don't block if job is completed
-            ->where(function ($query) use ($date) {
-                // Single-day bookings on this date
-                $query->where(function ($q) use ($date) {
-                    $q->where('scheduled_date', $date)
-                      ->whereNull('scheduled_end_date');
-                })
-                // Multi-day bookings that span this date (improved logic)
-                ->orWhere(function ($q) use ($date) {
-                    $q->where('scheduled_date', '<=', $date)
-                      ->where('scheduled_end_date', '>=', $date)
-                      ->whereNotNull('scheduled_end_date');
-                });
-            });
-
-        // If specific timeslot requested, filter by timeslot
-        if ($timeslotId) {
-            $query->where('timeslot_id', $timeslotId);
+        if (!$workHoursOverlap) {
+            return collect(); // Requested time is outside work hours
         }
 
-        return $query->pluck('technician_id')->unique();
+        // Filter technicians who don't have conflicting bookings
+        $availableTechnicians = $allTechnicians->filter(function ($technician) use ($startAt, $endAt) {
+            // Check for overlapping bookings
+            $overlapExists = Booking::where('technician_id', $technician->id)
+                ->whereNotIn('status', ['cancelled', 'completed'])
+                ->where(function ($q) use ($startAt, $endAt) {
+                    $q->where('scheduled_start_at', '<', $endAt)
+                        ->where('scheduled_end_at', '>', $startAt);
+                })
+                ->exists();
+
+            return !$overlapExists;
+        });
+
+        return $availableTechnicians->values();
     }
 
     /**
-     * Get technicians who have reached their daily job limit
-     * 
-     * @param string $date Date to check
-     * @return Collection Overloaded technician IDs
-     */
-    private function getOverloadedTechniciansForDate(string $date): Collection
-    {
-        // Count jobs scheduled for this date
-        $jobCounts = Booking::where('scheduled_date', $date)
-            ->where('status', '!=', 'cancelled')
-            ->groupBy('technician_id')
-            ->selectRaw('technician_id, COUNT(*) as job_count')
-            ->pluck('job_count', 'technician_id');
-
-        // Get technicians at or over their limit
-        return Technician::whereIn('id', $jobCounts->keys())
-            ->get()
-            ->filter(function ($technician) use ($jobCounts) {
-                return $jobCounts[$technician->id] >= $technician->max_daily_jobs;
-            })
-            ->pluck('id');
-    }
-
-    /**
-     * Generate availability matrix for multiple days
-     * Perfect for calendar/schedule views
-     * 
-     * @param string $startDate Start date (Y-m-d)
-     * @param int $days Number of days to generate (default 7 for week view)
-     * @return array Matrix of availability counts
+     * Generate simple availability counts per hour window for N days (08-17)
      */
     public function getAvailabilityMatrix(string $startDate, int $days = 7): array
     {
         $matrix = [];
-        $timeslots = Timeslot::orderBy('start_time')->get();
-        
         for ($i = 0; $i < $days; $i++) {
-            $currentDate = Carbon::parse($startDate)->addDays($i)->format('Y-m-d');
-            $matrix[$currentDate] = [];
-            
-            foreach ($timeslots as $timeslot) {
-                $availableCount = $this->getAvailableTechniciansCount($currentDate, $timeslot->id);
-                $matrix[$currentDate][$timeslot->id] = [
-                    'timeslot' => $timeslot->display_time,
-                    'time_range' => $timeslot->start_time . ' - ' . $timeslot->end_time,
-                    'available_count' => $availableCount,
-                    'is_available' => $availableCount > 0,
+            $date = Carbon::parse($startDate)->addDays($i)->toDateString();
+            $matrix[$date] = [];
+            foreach ([8, 9, 10, 11, 13, 14, 15, 16] as $hour) {
+                $startAt = Carbon::parse($date)->setTime($hour, 0)->format('Y-m-d H:i:s');
+                $endAt = Carbon::parse($date)->setTime($hour + 1, 0)->format('Y-m-d H:i:s');
+                $count = $this->getAvailableTechniciansCountForWindow($startAt, $endAt);
+                $matrix[$date][sprintf('%02d:00-%02d:00', $hour, $hour + 1)] = [
+                    'start' => $startAt,
+                    'end' => $endAt,
+                    'available_count' => $count,
+                    'is_available' => $count > 0,
                 ];
             }
         }
-        
+
         return $matrix;
     }
 
     /**
      * Check if a technician is available for a multi-day booking
-     * 
-     * @param int $technicianId Technician ID
-     * @param string $startDate Start date (Y-m-d)
-     * @param string $endDate End date (Y-m-d)
-     * @param int|null $timeslotId Timeslot ID
-     * @return bool True if available for entire period
+     * Simplified: just check if technician is_available and no conflicting bookings
      */
-    public function isTechnicianAvailableForMultiDay(int $technicianId, string $startDate, string $endDate, ?int $timeslotId = null): bool
+    public function isTechnicianAvailableForMultiDay(int $technicianId, string $startDate, string $endDate, ?int $unused = null): bool
     {
+        $technician = Technician::find($technicianId);
+        if (!$technician || !$technician->is_available) {
+            return false;
+        }
+
         $start = Carbon::parse($startDate);
         $end = Carbon::parse($endDate);
-        
+
         // Check each day in the range
         for ($date = $start; $date->lte($end); $date->addDay()) {
-            $availableTechnicians = $this->getAvailableTechniciansForDate($date->format('Y-m-d'), $timeslotId);
+            $dayStart = $date->copy()->setTime(8, 0);
+            $dayEnd = $date->copy()->setTime(17, 0);
             
-            if (!$availableTechnicians->contains('id', $technicianId)) {
+            $overlapExists = Booking::where('technician_id', $technicianId)
+                ->whereNotIn('status', ['cancelled', 'completed'])
+                ->where(function ($q) use ($dayStart, $dayEnd) {
+                    $q->where('scheduled_start_at', '<', $dayEnd->format('Y-m-d H:i:s'))
+                        ->where('scheduled_end_at', '>', $dayStart->format('Y-m-d H:i:s'));
+                })
+                ->exists();
+                
+            if ($overlapExists) {
                 return false;
             }
         }
-        
+
         return true;
     }
 
     /**
      * Get next available date for a specific number of technicians
-     * Useful for "Next available: January 15" features
-     * 
-     * @param int $requiredTechnicians Number of technicians needed
-     * @param int|null $timeslotId Specific timeslot
-     * @param int $maxDaysToCheck Maximum days to search (default 30)
-     * @return string|null Next available date or null if none found
      */
-    public function getNextAvailableDate(int $requiredTechnicians = 1, ?int $timeslotId = null, int $maxDaysToCheck = 30): ?string
+    public function getNextAvailableDate(int $requiredTechnicians = 1, ?int $unused = null, int $maxDaysToCheck = 30): ?string
     {
         $today = Carbon::today();
-        
+
         for ($i = 0; $i < $maxDaysToCheck; $i++) {
             $checkDate = $today->copy()->addDays($i)->format('Y-m-d');
-            $availableCount = $this->getAvailableTechniciansCount($checkDate, $timeslotId);
-            
+            $startAt = Carbon::parse($checkDate.' '.self::WORK_START);
+            $endAt = Carbon::parse($checkDate.' '.self::WORK_END);
+            $availableCount = $this->getAvailableTechniciansCountForWindow($startAt->format('Y-m-d H:i:s'), $endAt->format('Y-m-d H:i:s'));
+
             if ($availableCount >= $requiredTechnicians) {
                 return $checkDate;
             }
         }
-        
+
         return null;
     }
 
     /**
      * Get availability summary for admin dashboard
-     * 
-     * @return array Summary statistics
      */
     public function getAvailabilitySummary(): array
     {
         $today = Carbon::today()->format('Y-m-d');
         $totalTechnicians = Technician::available()->count();
-        
+
         return [
             'total_technicians' => $totalTechnicians,
             'available_today' => $this->getAvailableTechniciansCount($today),
@@ -250,39 +188,34 @@ class TechnicianAvailabilityService
 
     /**
      * Get the timeslot with highest availability for a date
-     * 
-     * @param string $date Date to check
-     * @return array Peak availability info
      */
     private function getPeakAvailabilityForDate(string $date): array
     {
-        $timeslots = Timeslot::orderBy('start_time')->get();
         $peakSlot = null;
         $maxAvailable = 0;
-        
-        foreach ($timeslots as $timeslot) {
-            $available = $this->getAvailableTechniciansCount($date, $timeslot->id);
+
+        foreach ([8, 9, 10, 11, 13, 14, 15, 16] as $hour) {
+            $startAt = Carbon::parse($date.' '.$hour.':00:00');
+            $endAt = Carbon::parse($date.' '.($hour + 1).':00:00');
+            $available = $this->getAvailableTechniciansCountForWindow($startAt->format('Y-m-d H:i:s'), $endAt->format('Y-m-d H:i:s'));
             if ($available > $maxAvailable) {
                 $maxAvailable = $available;
-                $peakSlot = $timeslot;
+                $peakSlot = [
+                    'start' => $startAt->format('H:i'),
+                    'end' => $endAt->format('H:i'),
+                ];
             }
         }
-        
+
         return [
-            'timeslot' => $peakSlot?->display_time,
-            'time_range' => $peakSlot ? $peakSlot->start_time . ' - ' . $peakSlot->end_time : null,
+            'timeslot' => $peakSlot ? ($peakSlot['start'].' - '.$peakSlot['end']) : null,
+            'time_range' => $peakSlot ? ($peakSlot['start'].' - '.$peakSlot['end']) : null,
             'available_count' => $maxAvailable,
         ];
     }
 
     /**
      * Check if two time ranges overlap
-     * 
-     * @param string $start1 First range start time (H:i:s)
-     * @param string $end1 First range end time (H:i:s)  
-     * @param string $start2 Second range start time (H:i:s)
-     * @param string $end2 Second range end time (H:i:s)
-     * @return bool True if ranges overlap
      */
     private function timesOverlap($start1, $end1, $start2, $end2): bool
     {
@@ -291,37 +224,45 @@ class TechnicianAvailabilityService
         $end1 = Carbon::parse($end1);
         $start2 = Carbon::parse($start2);
         $end2 = Carbon::parse($end2);
-        
+
         // Compare just the time portion (ignore date)
         $start1Time = $start1->format('H:i:s');
         $end1Time = $end1->format('H:i:s');
         $start2Time = $start2->format('H:i:s');
         $end2Time = $end2->format('H:i:s');
-        
+
         // Two ranges overlap if: start1 < end2 AND start2 < end1
         return $start1Time < $end2Time && $start2Time < $end1Time;
     }
 
     /**
      * Check if technician is available for consecutive days
-     * 
-     * @param int $technicianId Technician ID
-     * @param string $startDate Start date (Y-m-d)  
-     * @param int $days Number of consecutive days needed
-     * @param int|null $timeslotId Timeslot ID
-     * @return bool True if available for all consecutive days
      */
     public function checkConsecutiveDayAvailability(int $technicianId, string $startDate, int $days, ?int $timeslotId = null): bool
     {
+        $technician = Technician::find($technicianId);
+        if (!$technician || !$technician->is_available) {
+            return false;
+        }
+
         for ($i = 0; $i < $days; $i++) {
-            $checkDate = Carbon::parse($startDate)->addDays($i)->format('Y-m-d');
-            $available = $this->getAvailableTechniciansForDate($checkDate, $timeslotId);
+            $date = Carbon::parse($startDate)->addDays($i);
+            $dayStart = $date->copy()->setTime(8, 0);
+            $dayEnd = $date->copy()->setTime(17, 0);
             
-            if (!$available->contains('id', $technicianId)) {
+            $overlapExists = Booking::where('technician_id', $technicianId)
+                ->whereNotIn('status', ['cancelled', 'completed'])
+                ->where(function ($q) use ($dayStart, $dayEnd) {
+                    $q->where('scheduled_start_at', '<', $dayEnd->format('Y-m-d H:i:s'))
+                        ->where('scheduled_end_at', '>', $dayStart->format('Y-m-d H:i:s'));
+                })
+                ->exists();
+                
+            if ($overlapExists) {
                 return false;
             }
         }
-        
+
         return true;
     }
 }

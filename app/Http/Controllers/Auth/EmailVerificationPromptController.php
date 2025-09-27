@@ -15,8 +15,19 @@ class EmailVerificationPromptController extends Controller
      */
     public function __invoke(Request $request): Response|RedirectResponse
     {
-        return $request->user()->hasVerifiedEmail()
-                    ? redirect()->intended(route('dashboard', absolute: false))
-                    : Inertia::render('auth/verify-email', ['status' => $request->session()->get('status')]);
+        $user = $request->user();
+
+        if ($user->hasVerifiedEmail()) {
+            // Redirect verified users to their appropriate dashboard
+            return match ($user->role) {
+                'admin' => redirect('/admin'),
+                'technician' => redirect('/technician'),
+                'customer' => redirect()->route('customer-dashboard'),
+                default => redirect()->route('customer-dashboard'),
+            };
+        }
+
+        // Email verification page is no longer used; redirect to OTP verification flow
+        return redirect()->route('auth.verify-otp');
     }
 }

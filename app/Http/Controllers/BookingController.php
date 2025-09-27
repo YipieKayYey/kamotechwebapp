@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Service;
 use App\Models\AirconType;
-use App\Models\Timeslot;
 use App\Models\Booking;
+use App\Models\Promotion;
+use App\Models\Service;
 use App\Services\TechnicianAvailabilityService;
 use App\Services\TechnicianRankingService;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
@@ -18,6 +18,7 @@ use Inertia\Response;
 class BookingController extends Controller
 {
     protected TechnicianAvailabilityService $availabilityService;
+
     protected TechnicianRankingService $rankingService;
 
     public function __construct(
@@ -57,16 +58,6 @@ class BookingController extends Controller
                 ];
             });
 
-            // Get all timeslots
-            $timeslots = Timeslot::orderBy('start_time')->get()->map(function ($timeslot) {
-                return [
-                    'id' => $timeslot->id,
-                    'display_time' => $timeslot->display_time,
-                    'start_time' => $timeslot->start_time,
-                    'end_time' => $timeslot->end_time,
-                ];
-            });
-
             // Available AC brands (from your admin panel)
             $brands = [
                 'Samsung', 'LG', 'Carrier', 'Daikin', 'Panasonic', 'Sharp',
@@ -76,18 +67,18 @@ class BookingController extends Controller
 
             // Philippine provinces (focused on your service areas)
             $provinces = [
-                'Bataan', 'Pampanga', 'Bulacan', 'Nueva Ecija', 'Tarlac', 'Zambales'
+                'Bataan', 'Pampanga', 'Bulacan', 'Nueva Ecija', 'Tarlac', 'Zambales',
             ];
 
             // Municipalities per province (from your existing data)
             $municipalities = [
                 'Bataan' => [
-                    'Balanga', 'Mariveles', 'Dinalupihan', 'Hermosa', 'Orani', 
-                    'Samal', 'Abucay', 'Pilar', 'Orion', 'Limay', 'Bagac', 'Morong'
+                    'Balanga', 'Mariveles', 'Dinalupihan', 'Hermosa', 'Orani',
+                    'Samal', 'Abucay', 'Pilar', 'Orion', 'Limay', 'Bagac', 'Morong',
                 ],
                 'Pampanga' => [
-                    'Angeles', 'San Fernando', 'Mabalacat', 'Mexico', 'San Luis', 
-                    'Guagua', 'Apalit', 'Candaba', 'Floridablanca', 'Lubao'
+                    'Angeles', 'San Fernando', 'Mabalacat', 'Mexico', 'San Luis',
+                    'Guagua', 'Apalit', 'Candaba', 'Floridablanca', 'Lubao',
                 ],
                 // Add other provinces as needed
             ];
@@ -95,7 +86,7 @@ class BookingController extends Controller
             return Inertia::render('booking', [
                 'services' => $services,
                 'airconTypes' => $airconTypes,
-                'timeslots' => $timeslots,
+                // Dynamic scheduling – no timeslots
                 'brands' => $brands,
                 'provinces' => $provinces,
                 'municipalities' => $municipalities,
@@ -103,190 +94,352 @@ class BookingController extends Controller
                     'user' => auth()->user() ? [
                         'id' => auth()->user()->id,
                         'name' => auth()->user()->name,
+                        'first_name' => auth()->user()->first_name,
+                        'middle_initial' => auth()->user()->middle_initial,
+                        'last_name' => auth()->user()->last_name,
                         'email' => auth()->user()->email,
                         'phone' => auth()->user()->phone,
-                        'province' => auth()->user()->province,
-                        'city_municipality' => auth()->user()->city_municipality,
-                        'barangay' => auth()->user()->barangay,
                         'house_no_street' => auth()->user()->house_no_street,
-                        'formatted_address' => auth()->user()->formatted_address,
-                        'has_structured_address' => auth()->user()->hasStructuredAddress(),
-                    ] : null
-                ]
+                        'barangay' => auth()->user()->barangay,
+                        'city_municipality' => auth()->user()->city_municipality,
+                        'province' => auth()->user()->province,
+                        'nearest_landmark' => auth()->user()->nearest_landmark,
+                        'full_address' => auth()->user()->full_address,
+                    ] : null,
+                ],
+                'booking' => session('booking'),
+                'booking_success' => session('booking_success'),
             ]);
 
         } catch (\Exception $e) {
             Log::error('Error loading booking page', ['error' => $e->getMessage()]);
-            
+
             return Inertia::render('booking', [
                 'error' => 'Failed to load booking data. Please try again.',
                 'services' => [],
                 'airconTypes' => [],
-                'timeslots' => [],
+                // Dynamic scheduling – no timeslots
                 'brands' => [],
                 'provinces' => [],
                 'municipalities' => [],
-                'auth' => ['user' => null]
+                'auth' => ['user' => null],
             ]);
         }
     }
 
     /**
-     * Check real-time availability for timeslots (AJAX endpoint)
+     * Check availability for dynamic time window
      */
     public function checkAvailability(Request $request): JsonResponse
     {
+        // Keep backward compatibility for old timeslot-based calls
+        if ($request->has('date') && ! $request->has('start_datetime')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please use the new dynamic scheduling API',
+            ], 410);
+        }
+
+        // New dynamic availability check
         $validator = Validator::make($request->all(), [
-            'date' => 'required|date|after_or_equal:today',
-            'timeslot_id' => 'nullable|exists:timeslots,id'
+            'start_datetime' => 'required|date_format:Y-m-d H:i:s',
+            'end_datetime' => 'required|date_format:Y-m-d H:i:s|after:start_datetime',
+            'service_id' => 'nullable|exists:services,id',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid request data',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
         try {
-            $date = $request->input('date');
-            $timeslotId = $request->input('timeslot_id');
+            $startAt = $request->input('start_datetime');
+            $endAt = $request->input('end_datetime');
 
-            if ($timeslotId) {
-                // Check specific timeslot
-                $availableCount = $this->availabilityService->getAvailableTechniciansCount($date, $timeslotId);
-                
-                return response()->json([
-                    'success' => true,
-                    'data' => [
-                        'date' => $date,
-                        'timeslot_id' => $timeslotId,
-                        'available_count' => $availableCount,
-                        'is_available' => $availableCount > 0
-                    ]
-                ]);
-            } else {
-                // Check all timeslots for the date
-                $timeslots = Timeslot::orderBy('start_time')->get();
-                $availability = [];
+            // Use TechnicianAvailabilityService exactly like admin panel
+            $availableTechnicians = $this->availabilityService->getAvailableTechniciansForWindow($startAt, $endAt);
+            $availableCount = $availableTechnicians->count();
 
-                foreach ($timeslots as $timeslot) {
-                    $availableCount = $this->availabilityService->getAvailableTechniciansCount($date, $timeslot->id);
-                    $availability[$timeslot->id] = [
-                        'timeslot_id' => $timeslot->id,
-                        'display_time' => $timeslot->display_time,
-                        'available_count' => $availableCount,
-                        'is_available' => $availableCount > 0
-                    ];
-                }
+            Log::info('Availability check for window', [
+                'start' => $startAt,
+                'end' => $endAt,
+                'available_count' => $availableCount,
+            ]);
 
-                return response()->json([
-                    'success' => true,
-                    'data' => [
-                        'date' => $date,
-                        'availability' => $availability
-                    ]
-                ]);
-            }
-
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'start_datetime' => $startAt,
+                    'end_datetime' => $endAt,
+                    'available_count' => $availableCount,
+                    'is_available' => $availableCount > 0,
+                    'technicians' => $availableTechnicians->pluck('user.name', 'id'), // Include technician names for debugging
+                ],
+            ]);
         } catch (\Exception $e) {
             Log::error('Error checking availability', [
                 'error' => $e->getMessage(),
-                'date' => $request->input('date'),
-                'timeslot_id' => $request->input('timeslot_id')
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to check availability'
+                'message' => 'Failed to check availability: '.$e->getMessage(),
             ], 500);
         }
     }
 
     /**
-     * Get ranked technicians using Greedy Algorithm (AJAX endpoint)
+     * Get ranked technicians for dynamic time window
      */
     public function getTechnicianRanking(Request $request): JsonResponse
     {
+        // Keep backward compatibility
+        if ($request->has('date') && ! $request->has('start_datetime')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please use the new dynamic scheduling API',
+            ], 410);
+        }
+
         $validator = Validator::make($request->all(), [
+            'start_datetime' => 'required|date_format:Y-m-d H:i:s',
+            'end_datetime' => 'required|date_format:Y-m-d H:i:s|after:start_datetime',
             'service_id' => 'required|exists:services,id',
-            'date' => 'required|date|after_or_equal:today',
-            'timeslot_id' => 'required|exists:timeslots,id'
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid request data',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
         try {
+            $startAt = $request->input('start_datetime');
+            $endAt = $request->input('end_datetime');
             $serviceId = $request->input('service_id');
-            $date = $request->input('date');
-            $timeslotId = $request->input('timeslot_id');
 
-            // Execute Greedy Algorithm (same as admin panel)
-            $rankedTechnicians = $this->rankingService->getRankedTechniciansForService(
+            // Use TechnicianRankingService exactly like admin panel does
+            // This uses the Pure Service-Rating Algorithm
+            $rankedTechnicians = $this->rankingService->getRankedTechniciansForWindow(
                 $serviceId,
-                $date,
-                $timeslotId
+                $startAt,
+                $endAt,
+                null, // No customer lat (removed GPS)
+                null  // No customer lng (removed GPS)
             );
 
-            // Debug logging to track technician count
-            Log::info('DEBUG: Technician ranking results', [
-                'service_id' => $serviceId,
-                'date' => $date,
-                'timeslot_id' => $timeslotId,
-                'total_technicians_returned' => $rankedTechnicians->count(),
-                'technician_ids' => $rankedTechnicians->pluck('id')->toArray(),
-                'technician_names' => $rankedTechnicians->pluck('user.name')->toArray()
-            ]);
-
-            // Format for frontend (same format as your static technician array)
-            $technicianData = $rankedTechnicians->map(function ($technician, $index) use ($serviceId) {
-                $rank = $index + 1;
-                
+            // Format response for frontend
+            $technicians = $rankedTechnicians->map(function ($technician, $index) use ($serviceId) {
                 return [
-                    'id' => (string) $technician->id, // Keep as string to match your existing format
+                    'id' => $technician->id,
                     'name' => $technician->user->name,
-                    'rating' => round($technician->service_specific_rating, 1),
+                    'rating' => round($technician->service_specific_rating ?? $technician->rating_average, 1),
+                    'rank' => $index + 1,
+                    'greedy_score' => round($technician->greedy_score, 3),
+                    'service_review_count' => $technician->service_review_count ?? 0,
+                    'service_completed_jobs' => $technician->service_completed_jobs ?? 0,
                     'experience' => $this->formatExperience($technician),
                     'specializations' => $this->getTechnicianSpecializations($technician, $serviceId),
-                    // Additional data for transparency
-                    'rank' => $rank,
-                    'greedy_score' => round($technician->greedy_score, 3),
-                    'service_review_count' => $technician->service_review_count,
-                    'service_completed_jobs' => $technician->service_completed_jobs ?? 0,
                 ];
             });
 
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'service_id' => $serviceId,
-                    'date' => $date,
-                    'timeslot_id' => $timeslotId,
-                    'technicians' => $technicianData,
-                    'algorithm_used' => 'Pure Service-Rating Algorithm (100% Service Expertise)'
-                ]
+                    'technicians' => $technicians,
+                    'count' => $technicians->count(),
+                ],
             ]);
-
         } catch (\Exception $e) {
-            Log::error('Error getting technician ranking', [
-                'error' => $e->getMessage(),
-                'service_id' => $request->input('service_id'),
-                'date' => $request->input('date'),
-                'timeslot_id' => $request->input('timeslot_id')
-            ]);
+            Log::error('Error getting technician ranking', ['error' => $e->getMessage()]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to get technician ranking'
+                'message' => 'Failed to get technician ranking',
             ], 500);
         }
+    }
+
+    /**
+     * Calculate service end time based on duration
+     */
+    public function calculateEndTime(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'start_datetime' => 'required|date_format:Y-m-d H:i:s',
+            'service_id' => 'required|exists:services,id',
+            'number_of_units' => 'required|integer|min:1|max:50',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $service = Service::find($request->input('service_id'));
+            $startDateTime = \Carbon\Carbon::parse($request->input('start_datetime'));
+            $units = $request->input('number_of_units');
+
+            // Calculate total duration using admin panel logic
+            $baseDuration = $service->duration_minutes ?? 60;
+            $prepMinutes = $service->prep_minutes ?? 60;
+
+            // Use simple linear scaling and round up to nearest hour like admin panel
+            $rawTotal = $baseDuration * $units;
+            $totalMinutes = (int) (ceil($rawTotal / 60) * 60) + $prepMinutes;
+
+            // Use business hours calculation like admin panel
+            [$scheduledStart, $scheduledEnd] = $this->planSchedule($startDateTime, $totalMinutes);
+
+            // Parse the calculated end time
+            $endDateTime = \Carbon\Carbon::parse($scheduledEnd);
+
+            // Check if service spans multiple days
+            $estimatedDays = $startDateTime->diffInDays($endDateTime) + 1;
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'start_datetime' => $scheduledStart,
+                    'end_datetime' => $scheduledEnd,
+                    'duration_minutes' => $totalMinutes,
+                    'estimated_days' => $estimatedDays,
+                    'service_name' => $service->name,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error calculating end time', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to calculate end time',
+            ], 500);
+        }
+    }
+
+    /**
+     * Plan schedule respecting business hours (8AM-12PM, 1PM-5PM)
+     */
+    protected function planSchedule(\Carbon\Carbon $startAt, int $workMinutes, int $paddingMinutes = 0): array
+    {
+        $startAt = $this->normalizeStart($startAt);
+        $current = $startAt->copy();
+        $remaining = $workMinutes;
+        $hops = 0;
+
+        while ($remaining > 0 && $hops < 1000) {
+            [$winStart, $winEnd] = $this->currentWindow($current);
+            if ($current->lt($winStart)) {
+                $current = $winStart->copy();
+            }
+
+            // Compute minutes available until the end of the current window
+            $available = max(0, $current->diffInMinutes($winEnd, false));
+            if ($available <= 0) {
+                $current = $this->nextWindowStart($current);
+                $hops++;
+
+                continue;
+            }
+
+            $consume = min($remaining, $available);
+            $current->addMinutes($consume);
+            $remaining -= $consume;
+
+            if ($remaining > 0) {
+                $current = $this->nextWindowStart($current);
+                $hops++;
+            }
+        }
+
+        $endWithPadding = $this->addBusinessMinutes($current->copy(), $paddingMinutes);
+
+        return [$startAt->format('Y-m-d H:i:s'), $endWithPadding->format('Y-m-d H:i:s')];
+    }
+
+    /**
+     * Normalize start time to business hours
+     */
+    protected function normalizeStart(\Carbon\Carbon $dt): \Carbon\Carbon
+    {
+        if ($dt->lt($dt->copy()->setTime(8, 0))) {
+            return $dt->copy()->setTime(8, 0);
+        }
+        if ($dt->gte($dt->copy()->setTime(12, 0)) && $dt->lt($dt->copy()->setTime(13, 0))) {
+            return $dt->copy()->setTime(13, 0);
+        }
+        if ($dt->gte($dt->copy()->setTime(17, 0))) {
+            return $dt->copy()->addDay()->setTime(8, 0);
+        }
+
+        return $dt;
+    }
+
+    /**
+     * Get current business window (morning or afternoon)
+     */
+    protected function currentWindow(\Carbon\Carbon $dt): array
+    {
+        $mStart = $dt->copy()->setTime(8, 0);
+        $mEnd = $dt->copy()->setTime(12, 0);
+        $aStart = $dt->copy()->setTime(13, 0);
+        $aEnd = $dt->copy()->setTime(17, 0);
+
+        return $dt->lt($mEnd) ? [$mStart, $mEnd] : [$aStart, $aEnd];
+    }
+
+    /**
+     * Get next business window start
+     */
+    protected function nextWindowStart(\Carbon\Carbon $dt): \Carbon\Carbon
+    {
+        // If exactly at 12:00, this is lunch start – continue at 13:00 same day
+        return $dt->lte($dt->copy()->setTime(12, 0))
+            ? $dt->copy()->setTime(13, 0)
+            : $dt->copy()->addDay()->setTime(8, 0);
+    }
+
+    /**
+     * Add business minutes to a datetime
+     */
+    protected function addBusinessMinutes(\Carbon\Carbon $start, int $minutes): \Carbon\Carbon
+    {
+        $current = $start->copy();
+        $remaining = max(0, $minutes);
+        $hops = 0;
+
+        while ($remaining > 0 && $hops < 1000) {
+            [$winStart, $winEnd] = $this->currentWindow($current);
+            if ($current->lt($winStart)) {
+                $current = $winStart->copy();
+            }
+
+            $available = max(0, $current->diffInMinutes($winEnd, false));
+            if ($available <= 0) {
+                $current = $this->nextWindowStart($current);
+                $hops++;
+
+                continue;
+            }
+
+            $consume = min($remaining, $available);
+            $current->addMinutes($consume);
+            $remaining -= $consume;
+
+            if ($remaining > 0) {
+                $current = $this->nextWindowStart($current);
+                $hops++;
+            }
+        }
+
+        return $current;
     }
 
     /**
@@ -297,20 +450,20 @@ class BookingController extends Controller
         $validator = Validator::make($request->all(), [
             'service_id' => 'required|exists:services,id',
             'aircon_type_id' => 'required|exists:aircon_types,id',
-            'number_of_units' => 'required|integer|min:1|max:50'
+            'number_of_units' => 'required|integer|min:1|max:50',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid request data',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
         try {
             // Create a new Booking instance and set the attributes
-            $booking = new Booking();
+            $booking = new Booking;
             $booking->service_id = $request->input('service_id');
             $booking->aircon_type_id = $request->input('aircon_type_id');
             $booking->number_of_units = $request->input('number_of_units');
@@ -334,7 +487,7 @@ class BookingController extends Controller
                     'number_of_units' => $units,
                     'base_price' => $basePrice,
                     'total_amount' => round($totalAmount, 2),
-                ]
+                ],
             ]);
 
         } catch (\Exception $e) {
@@ -342,12 +495,12 @@ class BookingController extends Controller
                 'error' => $e->getMessage(),
                 'service_id' => $request->input('service_id'),
                 'aircon_type_id' => $request->input('aircon_type_id'),
-                'number_of_units' => $request->input('number_of_units')
+                'number_of_units' => $request->input('number_of_units'),
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to calculate pricing'
+                'message' => 'Failed to calculate pricing',
             ], 500);
         }
     }
@@ -361,7 +514,7 @@ class BookingController extends Controller
         Log::info('DEBUG: Booking submission received', [
             'request_data' => $request->all(),
             'user_authenticated' => auth()->check(),
-            'user_id' => auth()->id()
+            'user_id' => auth()->id(),
         ]);
 
         // Use the same validation as your admin panel CustomerBookingResource
@@ -371,8 +524,8 @@ class BookingController extends Controller
                 'aircon_type_id' => 'required|exists:aircon_types,id',
                 'number_of_units' => 'required|integer|min:1|max:50',
                 'ac_brand' => 'nullable|string|max:255',
-                'scheduled_date' => 'required|date|after_or_equal:today',
-                'timeslot_id' => 'required|exists:timeslots,id',
+                'scheduled_start_at' => 'required|date_format:Y-m-d H:i:s|after:today',
+                'scheduled_end_at' => 'required|date_format:Y-m-d H:i:s|after:scheduled_start_at',
                 'technician_id' => 'required|exists:technicians,id',
                 'customer_mobile' => 'nullable|string|max:20',
                 'province' => 'required|string|max:255',
@@ -385,7 +538,7 @@ class BookingController extends Controller
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('Booking validation failed', [
                 'errors' => $e->errors(),
-                'request_data' => $request->all()
+                'request_data' => $request->all(),
             ]);
             throw $e; // Re-throw to let Laravel handle the response
         }
@@ -394,11 +547,22 @@ class BookingController extends Controller
             // Set customer data
             if (auth()->check()) {
                 $validated['customer_id'] = auth()->id();
-                $validated['use_custom_address'] = $request->input('use_custom_address', false);
+                $useCustomAddress = $request->input('use_custom_address', false);
+
+                // If not using custom address, use the customer's registered address
+                if (! $useCustomAddress) {
+                    $customer = auth()->user();
+                    if ($customer->house_no_street) {
+                        $validated['province'] = $customer->province;
+                        $validated['city_municipality'] = $customer->city_municipality;
+                        $validated['barangay'] = $customer->barangay;
+                        $validated['house_no_street'] = $customer->house_no_street;
+                        $validated['nearest_landmark'] = $customer->nearest_landmark;
+                    }
+                }
             } else {
                 // Guest booking
                 $validated['customer_name'] = $request->input('customer_name', 'Guest Customer');
-                $validated['use_custom_address'] = true; // Guests always use custom address
             }
 
             $validated['created_by'] = auth()->id() ?? 1; // Fallback to admin for guests
@@ -408,43 +572,81 @@ class BookingController extends Controller
             // Create booking (will auto-calculate total_amount, duration, etc.)
             $booking = Booking::create($validated);
 
-            // Return booking data to frontend for success modal using Inertia redirect
-            return Inertia::render('booking', [
-                'services' => $this->getServicesData(),
-                'airconTypes' => $this->getAirconTypesData(), 
-                'timeslots' => $this->getTimeslotsData(),
-                'brands' => $this->getBrandsData(),
-                'provinces' => $this->getProvincesData(),
-                'municipalities' => $this->getMunicipalitiesData(),
-                'auth' => [
-                    'user' => auth()->user() ? [
-                        'id' => auth()->user()->id,
-                        'name' => auth()->user()->name,
-                        'email' => auth()->user()->email,
-                        'phone' => auth()->user()->phone,
-                        'province' => auth()->user()->province,
-                        'city_municipality' => auth()->user()->city_municipality,
-                        'barangay' => auth()->user()->barangay,
-                        'house_no_street' => auth()->user()->house_no_street,
-                        'formatted_address' => auth()->user()->formatted_address,
-                        'has_structured_address' => auth()->user()->hasStructuredAddress(),
-                    ] : null
-                ],
-                'booking' => [
-                    'booking_number' => $booking->booking_number,
-                    'id' => $booking->id,
-                    'total_amount' => $booking->total_amount,
-                    'service_name' => $booking->service->name,
-                    'scheduled_date' => $booking->scheduled_date,
-                    'message' => "Booking {$booking->booking_number} created successfully!"
-                ],
-                'success' => true
+            // Flash the booking data and redirect back to booking page
+            session()->flash('booking_success', [
+                'booking_number' => $booking->booking_number,
+                'id' => $booking->id,
+                'total_amount' => $booking->total_amount,
+                'service_name' => $booking->service->name,
+                'scheduled_start_at' => $booking->scheduled_start_at,
+                'scheduled_end_at' => $booking->scheduled_end_at,
+                'message' => "Booking {$booking->booking_number} created successfully!",
+            ]);
+
+        try {
+            // Prepare friendly summary for email
+            $summary = [
+                'service' => optional($booking->service)->name,
+                'aircon' => optional($booking->airconType)->name,
+                'units' => $booking->number_of_units,
+                'start' => optional($booking->scheduled_start_at)->format('M j, Y g:i A'),
+                'end' => optional($booking->scheduled_end_at)->format('M j, Y g:i A'),
+                'address' => $booking->service_location,
+                'total' => $booking->total_amount,
+            ];
+
+            // Get current active promotions from the DB formatted like the booking page
+            $promotions = \App\Models\Promotion::query()
+                ->where(function ($q) {
+                    $today = now()->toDateString();
+                    $q->whereNull('start_date')->orWhere('start_date', '<=', $today);
+                })
+                ->where(function ($q) {
+                    $today = now()->toDateString();
+                    $q->whereNull('end_date')->orWhere('end_date', '>=', $today);
+                })
+                ->where('is_active', true)
+                ->orderBy('display_order')
+                ->limit(6)
+                ->get()
+                ->map(function ($p) {
+                    return [
+                        'title' => $p->title,
+                        'formatted_discount' => $p->formatted_discount,
+                    ];
+                })
+                ->values()
+                ->toArray();
+
+            // Notify customer using same email stack as OTP (Laravel Notifications)
+            if ($booking->customer) {
+                $booking->customer->notify(new \App\Notifications\BookingConfirmationNotification($summary, $promotions));
+            } elseif ($booking->guest_customer_id && $booking->customer_email) {
+                // Fallback when guest provided email only
+                \Illuminate\Support\Facades\Mail::to($booking->customer_email)
+                    ->send((new \App\Notifications\BookingConfirmationNotification($summary, $promotions))->toMail((object) ['name' => $booking->customer_name]));
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Booking confirmation email failed', [
+                'booking_id' => $booking->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+            // Redirect back with success message
+            return redirect()->route('booking')->with('booking', [
+                'booking_number' => $booking->booking_number,
+                'id' => $booking->id,
+                'total_amount' => $booking->total_amount,
+                'service_name' => $booking->service->name,
+                'scheduled_start_at' => $booking->scheduled_start_at,
+                'scheduled_end_at' => $booking->scheduled_end_at,
             ]);
 
         } catch (\Exception $e) {
             Log::error('Error creating booking', [
                 'error' => $e->getMessage(),
-                'data' => $validated
+                'data' => $validated,
             ]);
 
             return back()->withErrors(['error' => 'Failed to create booking. Please try again.'])
@@ -458,7 +660,8 @@ class BookingController extends Controller
     private function formatExperience($technician): string
     {
         $years = now()->diffInYears($technician->hire_date);
-        return $years > 0 ? "{$years} years" : "< 1 year";
+
+        return $years > 0 ? "{$years} years" : '< 1 year';
     }
 
     /**
@@ -468,7 +671,7 @@ class BookingController extends Controller
     {
         // You can enhance this based on your service categorization
         $service = Service::find($serviceId);
-        
+
         // For now, return the service category or default specializations
         return [$service->name, $service->category ?? 'AC Maintenance'];
     }
@@ -501,17 +704,7 @@ class BookingController extends Controller
         });
     }
 
-    private function getTimeslotsData()
-    {
-        return Timeslot::orderBy('start_time')->get()->map(function ($timeslot) {
-            return [
-                'id' => $timeslot->id,
-                'display_time' => $timeslot->display_time,
-                'start_time' => $timeslot->start_time,
-                'end_time' => $timeslot->end_time,
-            ];
-        });
-    }
+    // Removed timeslot data provider – dynamic scheduling in use
 
     private function getBrandsData()
     {
@@ -525,7 +718,7 @@ class BookingController extends Controller
     private function getProvincesData()
     {
         return [
-            'Bataan', 'Pampanga', 'Bulacan', 'Nueva Ecija', 'Tarlac', 'Zambales'
+            'Bataan', 'Pampanga', 'Bulacan', 'Nueva Ecija', 'Tarlac', 'Zambales',
         ];
     }
 
@@ -533,58 +726,129 @@ class BookingController extends Controller
     {
         return [
             'Bataan' => [
-                'Balanga', 'Mariveles', 'Dinalupihan', 'Hermosa', 'Orani', 
-                'Samal', 'Abucay', 'Pilar', 'Orion', 'Limay', 'Bagac', 'Morong'
+                'Balanga', 'Mariveles', 'Dinalupihan', 'Hermosa', 'Orani',
+                'Samal', 'Abucay', 'Pilar', 'Orion', 'Limay', 'Bagac', 'Morong',
             ],
             'Pampanga' => [
-                'Angeles', 'San Fernando', 'Mabalacat', 'Mexico', 'San Luis', 
-                'Guagua', 'Apalit', 'Candaba', 'Floridablanca', 'Lubao'
+                'Angeles', 'San Fernando', 'Mabalacat', 'Mexico', 'San Luis',
+                'Guagua', 'Apalit', 'Candaba', 'Floridablanca', 'Lubao',
             ],
             // Add other provinces as needed
         ];
     }
 
     /**
-     * Customer requests cancellation (24-hour rule enforced)
+     * Get available promotions for a service/aircon type
+     */
+    public function getAvailablePromotions(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'service_id' => 'nullable|exists:services,id',
+            'aircon_type_id' => 'nullable|exists:aircon_types,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $serviceId = $request->input('service_id');
+            $airconTypeId = $request->input('aircon_type_id');
+
+            // Get active promotions
+            $promotions = Promotion::active()
+                ->where('discount_type', '!=', null)
+                ->where('discount_value', '>', 0)
+                ->get()
+                ->filter(function ($promotion) use ($serviceId, $airconTypeId) {
+                    // Check if promotion applies to all services or specific service
+                    $serviceMatch = empty($promotion->applicable_services) ||
+                                  ($serviceId && in_array($serviceId, $promotion->applicable_services));
+
+                    // Check if promotion applies to all aircon types or specific type
+                    $airconMatch = empty($promotion->applicable_aircon_types) ||
+                                 ($airconTypeId && in_array($airconTypeId, $promotion->applicable_aircon_types));
+
+                    return $serviceMatch && $airconMatch;
+                })
+                ->map(function ($promotion) {
+                    // Create simplified discount text
+                    $simplifiedDiscount = match ($promotion->discount_type) {
+                        'percentage' => $promotion->discount_value.'% OFF',
+                        'fixed' => '₱'.number_format((float) $promotion->discount_value).' OFF',
+                        'free_service' => 'FREE SERVICE',
+                        default => $promotion->formatted_discount
+                    };
+
+                    return [
+                        'id' => $promotion->id,
+                        'title' => $promotion->title,
+                        'subtitle' => $promotion->subtitle,
+                        'discount_type' => $promotion->discount_type,
+                        'discount_value' => $promotion->discount_value,
+                        'formatted_discount' => $simplifiedDiscount,
+                        'promo_code' => $promotion->promo_code,
+                        'start_date' => $promotion->start_date?->format('Y-m-d'),
+                        'end_date' => $promotion->end_date?->format('Y-m-d'),
+                        'is_active' => $promotion->is_active,
+                    ];
+                })
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'promotions' => $promotions,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error getting promotions', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get promotions',
+            ], 500);
+        }
+    }
+
+    /**
+     * Customer requests cancellation (no time gating; admin will accept/decline)
      */
     public function requestCancellation(Request $request, Booking $booking): JsonResponse
     {
-        // Validate 24-hour rule
-        if ($booking->scheduled_date <= now()->addDay()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Cancellation not allowed - booking is within 24 hours'
-            ], 422);
-        }
-        
+        // No time gating; admin panel will review and accept/decline
+
         // Validate ownership (for logged in users)
         if (auth()->check() && $booking->customer_id !== auth()->id()) {
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
         }
-        
+
         // Check if already requested
         if ($booking->status === 'cancel_requested') {
             return response()->json([
                 'success' => false,
-                'message' => 'Cancellation already requested'
+                'message' => 'Cancellation already requested',
             ], 422);
         }
-        
+
         $validated = $request->validate([
             'reason_category' => 'required|in:personal,schedule_conflict,emergency,weather,other',
-            'reason_details' => 'required|string|min:10|max:500'
+            'reason_details' => 'required|string|min:10|max:500',
         ]);
-        
+
         $booking->update([
             'status' => 'cancel_requested',
             'cancellation_reason' => $validated['reason_category'],
             'cancellation_details' => $validated['reason_details'],
-            'cancellation_requested_at' => now()
+            'cancellation_requested_at' => now(),
         ]);
-        
+
         return response()->json([
-            'success' => true, 
-            'message' => 'Cancellation request submitted successfully'
+            'success' => true,
+            'message' => 'Cancellation request submitted successfully',
         ]);
     }
 }

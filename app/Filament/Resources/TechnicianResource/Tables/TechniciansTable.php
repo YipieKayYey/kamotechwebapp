@@ -255,7 +255,7 @@ class TechniciansTable
                     })
                     ->deselectRecordsAfterCompletion(),
                     
-                Tables\Actions\DeleteBulkAction::make(),
+                // Delete actions disabled as per panelist requirement
             ]),
         ];
     }

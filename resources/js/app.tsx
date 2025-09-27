@@ -20,6 +20,31 @@ if (token) {
     axios.defaults.headers.common['X-CSRF-TOKEN'] = token;
 }
 
+// Add response interceptor to handle 410 errors globally
+axios.interceptors.response.use(
+    response => response,
+    error => {
+        if (error.response?.status === 410) {
+            console.error('API endpoint no longer available (410). The API format may have changed.');
+            console.error('Request URL:', error.config?.url);
+            console.error('Request data:', error.config?.data);
+            
+            // Provide user-friendly error message
+            if (error.config?.url?.includes('/booking/')) {
+                console.error('Booking API error: Please refresh the page and try again.');
+            }
+        }
+        if (error.response?.status === 419) {
+            // Session or CSRF token expired. Reload to refresh the token/session.
+            window.location.reload();
+            return; // stop further handling
+        }
+        
+        // Always reject the promise so individual error handlers can still run
+        return Promise.reject(error);
+    }
+);
+
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 createInertiaApp({
@@ -37,3 +62,12 @@ createInertiaApp({
 
 // This will set light / dark mode on load...
 initializeTheme();
+
+// Refresh the page automatically when the backend returns a 419 (Page Expired)
+// Works for Inertia navigations
+window.addEventListener('inertia:error', (event: any) => {
+    const status = event?.detail?.response?.status;
+    if (status === 419) {
+        window.location.reload();
+    }
+});

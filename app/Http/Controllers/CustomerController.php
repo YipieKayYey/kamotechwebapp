@@ -4,10 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Booking;
 use App\Models\Notification;
-use App\Models\RatingReview;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Carbon\Carbon;
 
 class CustomerController extends Controller
 {
@@ -18,26 +17,27 @@ class CustomerController extends Controller
     {
         try {
             $user = Auth::user();
-            
+
             \Log::info('Dashboard API called', [
                 'user' => $user ? $user->id : 'null',
-                'role' => $user ? $user->role : 'null'
+                'role' => $user ? $user->role : 'null',
             ]);
-            
-            if (!$user || $user->role !== 'customer') {
+
+            if (! $user || $user->role !== 'customer') {
                 \Log::warning('Unauthorized dashboard access', [
                     'user_id' => $user ? $user->id : null,
-                    'user_role' => $user ? $user->role : null
+                    'user_role' => $user ? $user->role : null,
                 ]);
+
                 return response()->json(['error' => 'Unauthorized'], 401);
             }
 
             // Get customer's bookings with relationships
             $bookings = Booking::where('customer_id', $user->id)
-                ->with(['service', 'airconType', 'technician.user', 'timeslot', 'review'])
-                ->orderBy('scheduled_date', 'desc')
+                ->with(['service', 'airconType', 'technician.user', 'review'])
+                ->orderBy('created_at', 'desc')
                 ->get();
-                
+
             \Log::info('Bookings retrieved', ['count' => $bookings->count()]);
 
             // Calculate statistics
@@ -53,8 +53,8 @@ class CustomerController extends Controller
                     'booking_number' => $booking->booking_number,
                     'service' => $booking->service->name,
                     'aircon_type' => $booking->airconType->name,
-                    'scheduled_date' => $booking->scheduled_date->format('M d, Y'),
-                    'timeslot' => $booking->timeslot ? $booking->timeslot->display_time : 'Not assigned',
+                    'scheduled_start' => optional($booking->scheduled_start_at)->format('M d, Y g:i A'),
+                    'scheduled_end' => optional($booking->scheduled_end_at)->format('M d, Y g:i A'),
                     'status' => $booking->status,
                     'total_amount' => $booking->total_amount,
                     'technician_name' => $booking->technician?->user->name ?? 'Not assigned',
@@ -66,16 +66,17 @@ class CustomerController extends Controller
 
             // Upcoming bookings (pending bookings only)
             $upcomingBookings = $bookings
-                ->where('scheduled_date', '>=', Carbon::today())
+                ->where('scheduled_start_at', '>=', Carbon::today())
                 ->where('status', 'pending')
+                ->sortByDesc('created_at')
                 ->values() // Reset keys
                 ->map(function ($booking) {
                     return [
                         'id' => $booking->id,
                         'booking_number' => $booking->booking_number,
                         'service' => $booking->service->name,
-                        'scheduled_date' => $booking->scheduled_date->format('M d, Y'),
-                        'timeslot' => $booking->timeslot ? $booking->timeslot->display_time : 'Not assigned',
+                        'scheduled_start' => optional($booking->scheduled_start_at)->format('M d, Y g:i A'),
+                        'scheduled_end' => optional($booking->scheduled_end_at)->format('M d, Y g:i A'),
                         'status' => $booking->status,
                         'technician_name' => $booking->technician?->user->name ?? 'Not assigned',
                         'technician_phone' => $booking->technician?->user->phone ?? null,
@@ -93,22 +94,22 @@ class CustomerController extends Controller
                 'recent_bookings' => $recentBookings,
                 'upcoming_bookings' => $upcomingBookings,
             ];
-            
+
             \Log::info('Dashboard data prepared successfully');
-            
+
             return response()->json($response);
-            
+
         } catch (\Exception $e) {
             \Log::error('Dashboard API error', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
-            
+
             return response()->json([
                 'error' => 'Internal server error',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
@@ -119,8 +120,8 @@ class CustomerController extends Controller
     public function getBookingHistory(Request $request)
     {
         $user = Auth::user();
-        
-        if (!$user || $user->role !== 'customer') {
+
+        if (! $user || $user->role !== 'customer') {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -128,13 +129,13 @@ class CustomerController extends Controller
         $status = $request->get('status');
 
         $query = Booking::where('customer_id', $user->id)
-            ->with(['service', 'airconType', 'technician.user', 'timeslot', 'review']);
+            ->with(['service', 'airconType', 'technician.user', 'review']);
 
         if ($status) {
             $query->where('status', $status);
         }
 
-        $bookings = $query->orderBy('scheduled_date', 'desc')
+        $bookings = $query->orderBy('created_at', 'desc')
             ->paginate($perPage);
 
         $bookings->getCollection()->transform(function ($booking) {
@@ -145,8 +146,8 @@ class CustomerController extends Controller
                 'aircon_type' => $booking->airconType->name,
                 'number_of_units' => $booking->number_of_units,
                 'ac_brand' => $booking->ac_brand,
-                'scheduled_date' => $booking->scheduled_date->format('M d, Y'),
-                'timeslot' => $booking->timeslot ? $booking->timeslot->display_time : 'Not assigned',
+                'scheduled_start' => optional($booking->scheduled_start_at)->format('M d, Y g:i A'),
+                'scheduled_end' => optional($booking->scheduled_end_at)->format('M d, Y g:i A'),
                 'status' => $booking->status,
                 'total_amount' => $booking->total_amount,
                 'payment_status' => $booking->payment_status,
@@ -169,17 +170,17 @@ class CustomerController extends Controller
     public function getBookingDetails($bookingId)
     {
         $user = Auth::user();
-        
-        if (!$user || $user->role !== 'customer') {
+
+        if (! $user || $user->role !== 'customer') {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $booking = Booking::where('customer_id', $user->id)
             ->where('id', $bookingId)
-            ->with(['service', 'airconType', 'technician.user', 'timeslot', 'review.categoryScores.category'])
+            ->with(['service', 'airconType', 'technician.user', 'review.categoryScores.category'])
             ->first();
 
-        if (!$booking) {
+        if (! $booking) {
             return response()->json(['error' => 'Booking not found'], 404);
         }
 
@@ -196,9 +197,8 @@ class CustomerController extends Controller
             ],
             'number_of_units' => $booking->number_of_units,
             'ac_brand' => $booking->ac_brand,
-            'scheduled_date' => $booking->scheduled_date->format('Y-m-d'),
-            'scheduled_end_date' => $booking->scheduled_end_date?->format('Y-m-d'),
-            'timeslot' => $booking->timeslot->display_time,
+            'scheduled_start_at' => optional($booking->scheduled_start_at)->format('Y-m-d H:i:s'),
+            'scheduled_end_at' => optional($booking->scheduled_end_at)->format('Y-m-d H:i:s'),
             'estimated_duration' => $booking->estimated_duration_minutes,
             'estimated_days' => $booking->estimated_days,
             'status' => $booking->status,
@@ -231,13 +231,102 @@ class CustomerController extends Controller
     }
 
     /**
+     * Update customer profile information
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = Auth::user();
+
+        if (! $user || $user->role !== 'customer') {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'phone' => [
+                'sometimes',
+                'required',
+                'string',
+                'regex:/^(09\d{2}-\d{3}-\d{4}|09\d{9}|\+639\d{9}|639\d{9})$/',
+            ],
+            'house_no_street' => 'sometimes|nullable|string|max:255',
+            'barangay' => 'sometimes|nullable|string|max:255',
+            'city_municipality' => 'sometimes|nullable|string|max:255',
+            'province' => 'sometimes|nullable|string|max:255',
+            'nearest_landmark' => 'sometimes|nullable|string|max:255',
+        ], [
+            'phone.regex' => 'Please enter a valid Philippine mobile number (e.g., 0917-123-4567)',
+        ]);
+
+        try {
+            $data = $request->only([
+                'name',
+                'phone',
+                'house_no_street',
+                'barangay',
+                'city_municipality',
+                'province',
+                'nearest_landmark',
+            ]);
+
+            // Normalize phone number if provided
+            if (isset($data['phone'])) {
+                $phone = preg_replace('/[^0-9]/', '', $data['phone']);
+                if (strlen($phone) === 10 && $phone[0] === '9') {
+                    $phone = '0'.$phone;
+                } elseif (strlen($phone) === 12 && substr($phone, 0, 2) === '63') {
+                    $phone = '0'.substr($phone, 2);
+                }
+                $data['phone'] = $phone;
+            }
+
+            $user->update($data);
+
+            \Log::info('Customer profile updated', [
+                'user_id' => $user->id,
+                'updated_fields' => array_keys($request->only([
+                    'name', 'phone', 'house_no_street', 'barangay',
+                    'city_municipality', 'province', 'nearest_landmark',
+                ])),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile updated successfully',
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone ?? '',
+                    'house_no_street' => $user->house_no_street ?? '',
+                    'barangay' => $user->barangay ?? '',
+                    'city_municipality' => $user->city_municipality ?? '',
+                    'province' => $user->province ?? '',
+                    'nearest_landmark' => $user->nearest_landmark ?? '',
+                ],
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Profile update failed', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => 'Failed to update profile. Please try again.',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Request cancellation for a booking
      */
     public function requestCancellation(Request $request, $bookingNumber)
     {
         $user = Auth::user();
-        
-        if (!$user || $user->role !== 'customer') {
+
+        if (! $user || $user->role !== 'customer') {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -246,27 +335,27 @@ class CustomerController extends Controller
             ->where('booking_number', $bookingNumber)
             ->first();
 
-        if (!$booking) {
+        if (! $booking) {
             return response()->json(['error' => 'Booking not found'], 404);
         }
 
         // Check if booking can be cancelled
-        if (!in_array($booking->status, ['pending', 'confirmed'])) {
+        if (! in_array($booking->status, ['pending', 'confirmed'])) {
             return response()->json([
                 'error' => 'This booking cannot be cancelled. Only pending or confirmed bookings can be cancelled.',
-                'current_status' => $booking->status
+                'current_status' => $booking->status,
             ], 400);
         }
 
         // Check if booking is too close to the scheduled date
-        $scheduledDate = $booking->scheduled_date;
+        $scheduledDate = $booking->scheduled_start_at;
         $now = Carbon::now();
         $hoursUntilService = $now->diffInHours($scheduledDate, false);
-        
+
         if ($hoursUntilService < 24) {
             return response()->json([
                 'error' => 'Cancellation requests must be made at least 24 hours before the scheduled service time.',
-                'hours_remaining' => max(0, $hoursUntilService)
+                'hours_remaining' => max(0, $hoursUntilService),
             ], 400);
         }
 
@@ -286,16 +375,16 @@ class CustomerController extends Controller
                     'booking_number' => $booking->booking_number,
                     'customer_name' => $user->name,
                     'customer_id' => $user->id,
-                    'scheduled_date' => $booking->scheduled_date->format('Y-m-d'),
-                    'service_name' => $booking->service->name ?? 'Unknown Service'
-                ]
+                    'scheduled_start_at' => optional($booking->scheduled_start_at)->format('Y-m-d H:i:s'),
+                    'service_name' => $booking->service->name ?? 'Unknown Service',
+                ],
             ]);
 
             \Log::info('Cancellation request submitted', [
                 'booking_id' => $booking->id,
                 'booking_number' => $booking->booking_number,
                 'customer_id' => $user->id,
-                'customer_name' => $user->name
+                'customer_name' => $user->name,
             ]);
 
             return response()->json([
@@ -305,19 +394,20 @@ class CustomerController extends Controller
                     'id' => $booking->id,
                     'booking_number' => $booking->booking_number,
                     'status' => $booking->status,
-                    'scheduled_date' => $booking->scheduled_date->format('M d, Y'),
-                ]
+                    // Keep response key for compatibility, sourced from dynamic field
+                    'scheduled_date' => optional($booking->scheduled_start_at)->format('M d, Y'),
+                ],
             ]);
 
         } catch (\Exception $e) {
             \Log::error('Cancellation request failed', [
                 'booking_id' => $booking->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
             return response()->json([
                 'error' => 'Failed to submit cancellation request. Please try again.',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }

@@ -2,19 +2,18 @@
 
 namespace App\Providers\Filament;
 
-use App\Http\Middleware\AdminMiddleware;
 use App\Filament\Pages\Auth\AdminLogin;
+use App\Http\Middleware\AdminMiddleware;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Navigation\NavigationItem;
 use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use Filament\Widgets;
-use Filament\Support\Facades\FilamentView;
-use Illuminate\Support\Facades\Blade;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -60,6 +59,22 @@ class AdminPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
                 AdminMiddleware::class,
+            ])
+            ->navigationGroups([
+                'Booking Management',
+                'Review Management',
+                'Service Management',
+                'Technician Management',
+                'User Management',
+                'Website Management',
+                'Reports',
+            ])
+            ->navigationItems([
+                NavigationItem::make('Create New Booking')
+                    ->url(fn (): string => \App\Filament\Resources\BookingResource::getUrl('create'))
+                    ->icon('heroicon-o-plus-circle')
+                    ->group('Booking Management')
+                    ->sort(0), // Shows first in the group
             ]);
     }
 

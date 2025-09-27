@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -13,28 +13,31 @@ use Laravel\Sanctum\HasApiTokens;
 /**
  * @property int $id
  * @property string $name
+ * @property string|null $first_name
+ * @property string|null $middle_initial
+ * @property string|null $last_name
  * @property string $email
  * @property \Illuminate\Support\Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $phone
- * @property string|null $address
- * @property string|null $province
- * @property string|null $city_municipality
- * @property string|null $barangay
- * @property string|null $house_no_street
  * @property string $role
  * @property bool $is_active
  * @property string|null $avatar
+ * @property string|null $house_no_street
+ * @property string|null $barangay
+ * @property string|null $city_municipality
+ * @property string|null $province
+ * @property string|null $nearest_landmark
  * @property string|null $remember_token
  * @property \Illuminate\Support\Carbon|null $created_at
  * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read string $service_location
- * @property-read string $formatted_address
+ * @property-read string $full_name
+ * @property-read string $full_address
  */
-class User extends Authenticatable implements FilamentUser
+class User extends Authenticatable implements FilamentUser, MustVerifyEmail
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasApiTokens;
+    use HasApiTokens, HasFactory, Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -42,18 +45,26 @@ class User extends Authenticatable implements FilamentUser
      * @var list<string>
      */
     protected $fillable = [
-        'name',
+        'name', // Keep for backward compatibility
+        'first_name',
+        'middle_initial',
+        'last_name',
         'email',
         'password',
         'phone',
-        'address',
-        'province',
-        'city_municipality',
-        'barangay',
+        'date_of_birth',
         'house_no_street',
+        'barangay',
+        'city_municipality',
+        'province',
+        'nearest_landmark',
         'role',
         'is_active',
         'avatar',
+        'google_id',
+        'google_token',
+        'google_refresh_token',
+        'avatar_original',
     ];
 
     /**
@@ -76,44 +87,9 @@ class User extends Authenticatable implements FilamentUser
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'date_of_birth' => 'date',
             'is_active' => 'boolean',
         ];
-    }
-
-    /**
-     * Address Helper Methods
-     */
-    public function getServiceLocationAttribute(): string
-    {
-        // Return structured address if available
-        if ($this->hasStructuredAddress()) {
-            return $this->formatted_address;
-        }
-
-        // Fallback to legacy address field
-        return $this->address ?? 'No address provided';
-    }
-
-    public function getFormattedAddressAttribute(): string
-    {
-        if (! $this->hasStructuredAddress()) {
-            return $this->address ?? 'No address provided';
-        }
-
-        $addressParts = array_filter([
-            $this->house_no_street,
-            $this->barangay,
-            $this->city_municipality,
-            $this->province,
-        ]);
-
-        return ! empty($addressParts) ? implode(', ', $addressParts) : ($this->address ?? 'No address provided');
-    }
-
-    public function hasStructuredAddress(): bool
-    {
-        return ! empty($this->province) || ! empty($this->city_municipality) ||
-               ! empty($this->barangay) || ! empty($this->house_no_street);
     }
 
     /**
@@ -122,6 +98,65 @@ class User extends Authenticatable implements FilamentUser
     public function technician()
     {
         return $this->hasOne(Technician::class);
+    }
+
+    /**
+     * Get the user's full name.
+     */
+    public function getFullNameAttribute()
+    {
+        $name = $this->first_name;
+        if ($this->middle_initial) {
+            $name .= ' '.$this->middle_initial.'.';
+        }
+        if ($this->last_name) {
+            $name .= ' '.$this->last_name;
+        }
+
+        return $name ?: $this->name; // Fallback to old name field
+    }
+
+    /**
+     * Get the user's full address.
+     */
+    public function getFullAddressAttribute()
+    {
+        $parts = array_filter([
+            $this->house_no_street,
+            $this->barangay,
+            $this->city_municipality,
+            $this->province,
+        ]);
+
+        return implode(', ', $parts);
+    }
+
+    /**
+     * Set the name attribute (for backward compatibility)
+     */
+    public function setNameAttribute($value)
+    {
+        $this->attributes['name'] = $value;
+
+        // Parse name and set normalized fields if not already set
+        if (! $this->first_name && ! $this->last_name) {
+            $nameParts = explode(' ', trim($value));
+            if (count($nameParts) > 0) {
+                $this->attributes['first_name'] = $nameParts[0];
+
+                if (count($nameParts) === 2) {
+                    $this->attributes['last_name'] = $nameParts[1];
+                } elseif (count($nameParts) >= 3) {
+                    // Check if second part is a middle initial
+                    if (strlen($nameParts[1]) <= 2) {
+                        $this->attributes['middle_initial'] = str_replace('.', '', $nameParts[1]);
+                        $this->attributes['last_name'] = implode(' ', array_slice($nameParts, 2));
+                    } else {
+                        $this->attributes['last_name'] = implode(' ', array_slice($nameParts, 1));
+                    }
+                }
+            }
+        }
     }
 
     public function bookingsAsCustomer()
@@ -178,11 +213,11 @@ class User extends Authenticatable implements FilamentUser
         if ($panel->getId() === 'admin') {
             return $this->role === 'admin' && $this->is_active;
         }
-        
+
         if ($panel->getId() === 'technician') {
             return $this->role === 'technician' && $this->is_active;
         }
-        
+
         return false;
     }
 }

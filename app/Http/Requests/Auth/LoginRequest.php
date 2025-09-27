@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Services\RecaptchaService;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
@@ -29,6 +30,7 @@ class LoginRequest extends FormRequest
         return [
             'email' => ['required', 'string', 'email'],
             'password' => ['required', 'string'],
+            'g-recaptcha-response' => ['sometimes', 'required'],
         ];
     }
 
@@ -41,11 +43,34 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
+        // Validate reCAPTCHA if provided
+        if ($this->has('g-recaptcha-response')) {
+            $recaptchaService = new RecaptchaService;
+            if (! $recaptchaService->verify($this->input('g-recaptcha-response'), $this->ip())) {
+                throw ValidationException::withMessages([
+                    'recaptcha' => 'Please complete the reCAPTCHA verification.',
+                ]);
+            }
+        }
+
+        // First check if user exists and their role
+        $user = \App\Models\User::where('email', $this->input('email'))->first();
+
+        if ($user && in_array($user->role, ['admin', 'technician'])) {
+            // Don't authenticate admin/technician through main login
+            throw ValidationException::withMessages([
+                'email' => match ($user->role) {
+                    'admin' => 'Admin users must use the admin login page at /admin/login',
+                    'technician' => 'Technician users must use the technician login page at /technician/login',
+                },
+            ]);
+        }
+
         if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
-                'email' => __('auth.failed'),
+                'email' => trans('auth.failed'),
             ]);
         }
 

@@ -57,8 +57,8 @@ export function PublicFooter() {
                             </div>
                             <div className="footer-contact-item">
                                 <Mail className="footer-icon" />
-                                <a href="mailto:kamotechairconditioningandserv@gmail.com">  
-                                    <span>kamotechairconditioning<br />andserv@gmail.com</span>
+                                <a href="mailto:support@kamotech.com">  
+                                    <span>support@kamotech.com</span>
                                 </a>
                             </div>
                             <div className="footer-contact-item">

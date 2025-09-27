@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
+import { route } from 'ziggy-js';
 import { 
   Bell, 
   Calendar, 
@@ -13,18 +14,19 @@ import {
   LogOut,
   Phone,
   Mail,
-  Home,
   CheckCircle,
   XCircle,
   AlertCircle,
   MessageCircle,
   Filter,
   Eye,
+  EyeOff,
   MessageSquare,
   CreditCard,
   Wrench,
   X
 } from 'lucide-react';
+import axios from 'axios';
 import { 
   customerApi, 
   notificationsApi, 
@@ -53,6 +55,18 @@ interface CustomerPageProps {
   [key: string]: any;
 }
 
+// Declare Botpress window object
+declare global {
+  interface Window {
+    botpressWebChat?: {
+      open: () => void;
+      close: () => void;
+      toggle: () => void;
+      [key: string]: any;
+    };
+  }
+}
+
 
 export default function CustomerDashboard() {
   const { auth } = usePage<CustomerPageProps>().props;
@@ -61,7 +75,6 @@ export default function CustomerDashboard() {
   const [notificationFilter, setNotificationFilter] = useState('all');
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
-  const [showChatbot, setShowChatbot] = useState(false);
   
   // API Data State
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
@@ -71,11 +84,111 @@ export default function CustomerDashboard() {
   const [loading, setLoading] = useState(true);
   const [bookingsLoading, setBookingsLoading] = useState(false);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelTargetBooking, setCancelTargetBooking] = useState<string | number | null>(null);
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  
+  // Profile editing state
+  const [profileData, setProfileData] = useState({
+    name: auth.user.name,
+    phone: auth.user.phone || '',
+    house_no_street: auth.user.house_no_street || '',
+    barangay: auth.user.barangay || '',
+    city_municipality: auth.user.city_municipality || '',
+    province: auth.user.province || '',
+    nearest_landmark: auth.user.nearest_landmark || '',
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
+
+  // Security: inline change password state
+  const [showPasswordEditor, setShowPasswordEditor] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    current_password: '',
+    password: '',
+    password_confirmation: '',
+  });
+  const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [showCurrentPwd, setShowCurrentPwd] = useState(false);
+  const [showNewPwd, setShowNewPwd] = useState(false);
+  const [showConfirmPwd, setShowConfirmPwd] = useState(false);
+
+  // Address autocomplete specifically for Account Settings (profileData)
+  const [profileProvinceSuggestions, setProfileProvinceSuggestions] = useState<string[]>([]);
+  const [profileMunicipalitySuggestions, setProfileMunicipalitySuggestions] = useState<string[]>([]);
+  const [profileBarangaySuggestions, setProfileBarangaySuggestions] = useState<string[]>([]);
+
+  const fetchProvinceSuggestions = async (q: string): Promise<string[]> => {
+    if (!q || q.length < 1) return [];
+    const res = await axios.get('/internal/locations/search', { params: { type: 'province', q, limit: 8 } });
+    return (res.data as { id: number; text: string }[]).map(r => r.text);
+  };
+
+  const resolveProvinceId = async (provinceName: string): Promise<number | undefined> => {
+    if (!provinceName) return undefined;
+    const res = await axios.get('/internal/locations/search', { params: { type: 'province', q: provinceName, limit: 1 } });
+    return res.data?.[0]?.id as number | undefined;
+  };
+
+  const fetchCitySuggestions = async (q: string, provinceName: string): Promise<string[]> => {
+    if (!q || !provinceName) return [];
+    const provId = await resolveProvinceId(provinceName);
+    if (!provId) return [];
+    const res = await axios.get('/internal/locations/search', { params: { type: 'city', parent_id: provId, q, limit: 10 } });
+    return (res.data as { id: number; text: string }[]).map(r => r.text);
+  };
+
+  const resolveCityId = async (cityName: string, provinceName: string): Promise<number | undefined> => {
+    if (!cityName || !provinceName) return undefined;
+    const provId = await resolveProvinceId(provinceName);
+    if (!provId) return undefined;
+    const res = await axios.get('/internal/locations/search', { params: { type: 'city', parent_id: provId, q: cityName, limit: 1 } });
+    return res.data?.[0]?.id as number | undefined;
+  };
+
+  const fetchBarangaySuggestions = async (q: string, cityName: string, provinceName: string): Promise<string[]> => {
+    if (!q || !cityName || !provinceName) return [];
+    const cityId = await resolveCityId(cityName, provinceName);
+    if (!cityId) return [];
+    const res = await axios.get('/internal/locations/search', { params: { type: 'barangay', parent_id: cityId, q, limit: 12 } });
+    return (res.data as { id: number; text: string }[]).map(r => r.text);
+  };
+
+  const handleProfileAddressInputChange = async (field: 'province' | 'municipality' | 'barangay', value: string) => {
+    setProfileData(prev => ({ ...prev, [field === 'municipality' ? 'city_municipality' : field]: value }));
+    if (field === 'province') {
+      setProfileProvinceSuggestions(await fetchProvinceSuggestions(value));
+      // clear lower levels when province changes
+      setProfileMunicipalitySuggestions([]);
+      setProfileBarangaySuggestions([]);
+    } else if (field === 'municipality') {
+      setProfileMunicipalitySuggestions(await fetchCitySuggestions(value, profileData.province));
+      setProfileBarangaySuggestions([]);
+    } else if (field === 'barangay') {
+      setProfileBarangaySuggestions(await fetchBarangaySuggestions(value, profileData.city_municipality, profileData.province));
+    }
+  };
+
+  const selectProfileSuggestion = (field: 'province' | 'municipality' | 'barangay', value: string) => {
+    setProfileData(prev => ({ ...prev, [field === 'municipality' ? 'city_municipality' : field]: value }));
+    if (field === 'province') setProfileProvinceSuggestions([]);
+    if (field === 'municipality') setProfileMunicipalitySuggestions([]);
+    if (field === 'barangay') setProfileBarangaySuggestions([]);
+  };
   
   // Load initial data
   useEffect(() => {
     loadDashboardData();
-    loadNotifications();
+    // Configure axios defaults for CSRF & JSON responses (needed for password update)
+    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    if (token) {
+      axios.defaults.headers.common['X-CSRF-TOKEN'] = token;
+    }
+    axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+    axios.defaults.headers.common['Accept'] = 'application/json';
+    axios.defaults.withCredentials = true;
   }, []);
   
   const loadDashboardData = async () => {
@@ -193,51 +306,42 @@ export default function CustomerDashboard() {
   const upcomingBookingsCount = getUpcomingBookingsCount();
 
   const handleSignOut = () => {
-    router.post('/logout');
+    // Use named route to ensure correct URL and CSRF handling
+    router.post(route('logout'));
   };
 
-  const handleRequestCancellation = async (bookingNumber: string) => {
-    try {
-      // Show confirmation dialog
-      const confirmed = window.confirm(
-        'Are you sure you want to request cancellation for this booking? '
-        + 'Please note that cancellation requests must be made at least 24 hours before the scheduled service time.'
-      );
-      
-      if (!confirmed) {
-        return;
-      }
+  const handleRequestCancellation = (bookingId: string | number) => {
+    setCancelTargetBooking(bookingId);
+    setShowCancelConfirm(true);
+  };
 
-      const result = await customerApi.requestCancellation(bookingNumber);
-      
+  const confirmCancellation = async () => {
+    if (!cancelTargetBooking) return;
+    try {
+      setCancelSubmitting(true);
+      const result = await customerApi.requestCancellation(cancelTargetBooking);
       if (result.success) {
-        // Success message
-        alert(`✅ ${result.message}`);
-        
-        // Refresh bookings to show updated status
+        setToast({ type: 'success', message: result.message || 'Cancellation requested.' });
+        setShowCancelConfirm(false);
+        setCancelTargetBooking(null);
         await refreshBookings();
       } else {
-        // Handle API errors
-        alert(`❌ ${result.error || 'Failed to submit cancellation request. Please try again.'}`);
+        setToast({ type: 'error', message: result.error || 'Failed to submit cancellation request. Please try again.' });
       }
     } catch (error: any) {
-      console.error('Error requesting cancellation:', handleApiError(error));
-      
-      // Handle different error scenarios
-      if (error.response?.status === 400) {
-        const errorData = error.response.data;
-        let errorMessage = errorData.error || 'Cannot cancel this booking.';
-        
-        if (errorData.hours_remaining !== undefined) {
-          errorMessage += ` Hours remaining: ${Math.round(errorData.hours_remaining)}`;
+      const msg = (() => {
+        if (error?.response?.status === 400) {
+          const data = error.response.data || {};
+          let m = data.error || 'Cannot cancel this booking.';
+          if (data.hours_remaining !== undefined) m += ` Hours remaining: ${Math.round(data.hours_remaining)}`;
+          return m;
         }
-        
-        alert(`❌ ${errorMessage}`);
-      } else if (error.response?.status === 404) {
-        alert('❌ Booking not found.');
-      } else {
-        alert('❌ An error occurred while processing your cancellation request. Please try again later.');
-      }
+        if (error?.response?.status === 404) return 'Booking not found.';
+        return 'An error occurred while processing your cancellation request. Please try again later.';
+      })();
+      setToast({ type: 'error', message: msg });
+    } finally {
+      setCancelSubmitting(false);
     }
   };
 
@@ -245,6 +349,159 @@ export default function CustomerDashboard() {
     router.visit('/evaluation-feedback', {
       data: { bookingId }
     });
+  };
+
+  // Format phone number to Philippine format
+  const formatPhilippinePhone = (input: string): string => {
+    // Remove all non-digit characters
+    const digits = input.replace(/\D/g, '');
+    
+    // If starts with 63, remove it
+    let formatted = digits;
+    if (formatted.startsWith('63')) {
+      formatted = formatted.substring(2);
+    }
+    
+    // If starts with 9 (without 0), add 0
+    if (formatted.length > 0 && formatted[0] === '9') {
+      formatted = '0' + formatted;
+    }
+    
+    // Limit to 11 digits
+    formatted = formatted.substring(0, 11);
+    
+    // Format as 0917-123-4567
+    if (formatted.length > 4 && formatted.length <= 7) {
+      formatted = formatted.substring(0, 4) + '-' + formatted.substring(4);
+    } else if (formatted.length > 7) {
+      formatted = formatted.substring(0, 4) + '-' + formatted.substring(4, 7) + '-' + formatted.substring(7);
+    }
+    
+    return formatted;
+  };
+
+  // Profile management functions
+  const handleProfileChange = (field: string, value: string) => {
+    // Format phone number if it's the phone field
+    if (field === 'phone') {
+      value = formatPhilippinePhone(value);
+    }
+    
+    setProfileData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+    
+    // Clear error when user starts typing
+    if (profileErrors[field]) {
+      setProfileErrors(prev => ({
+        ...prev,
+        [field]: ''
+      }));
+    }
+  };
+
+  const validateProfile = () => {
+    const errors: Record<string, string> = {};
+    
+    if (!profileData.name.trim()) {
+      errors.name = 'Name is required';
+    }
+    
+    if (!profileData.phone || !profileData.phone.trim()) {
+      errors.phone = 'Phone number is required';
+    } else {
+      // Remove all non-digit characters for validation
+      const cleanPhone = profileData.phone.replace(/\D/g, '');
+      
+      // Check if it's a valid Philippine mobile number
+      if (cleanPhone.length === 10 && cleanPhone.startsWith('9')) {
+        // Valid format: 9XXXXXXXXX (will be formatted as 09XXXXXXXXX)
+      } else if (cleanPhone.length === 11 && cleanPhone.startsWith('09')) {
+        // Valid format: 09XXXXXXXXX
+      } else if (cleanPhone.length === 12 && cleanPhone.startsWith('639')) {
+        // Valid format: 639XXXXXXXXX (international format)
+      } else {
+        errors.phone = 'Please enter a valid Philippine mobile number (e.g., 09123456789)';
+      }
+    }
+    
+    // Address validation - at least basic address should be provided
+    const addressFields = ['house_no_street', 'barangay', 'city_municipality', 'province'];
+    const hasAddress = addressFields.some(field => profileData[field as keyof typeof profileData].trim());
+    
+    if (!hasAddress) {
+      errors.address = 'Please provide at least your house number/street, barangay, city, or province';
+    }
+    
+    setProfileErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const saveProfile = async () => {
+    if (!validateProfile()) {
+      setToast({ type: 'error', message: 'Please fix the errors below' });
+      return;
+    }
+
+    try {
+      setProfileSaving(true);
+      const response = await fetch('/api/customer/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        },
+        body: JSON.stringify(profileData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setToast({ type: 'success', message: data.message || 'Profile updated successfully!' });
+        setEditingProfile(false);
+        setProfileErrors({});
+        
+        // Update the auth user data in the page props
+        // This will be reflected in the UI on next page load
+        window.location.reload(); // Simple refresh to update the user data
+      } else {
+        setToast({ type: 'error', message: data.error || 'Failed to update profile' });
+        if (data.errors) {
+          setProfileErrors(data.errors);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      setToast({ type: 'error', message: 'An error occurred while updating your profile' });
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const cancelProfileEdit = () => {
+    setProfileData({
+      name: auth.user.name,
+      phone: auth.user.phone || '',
+      house_no_street: auth.user.house_no_street || '',
+      barangay: auth.user.barangay || '',
+      city_municipality: auth.user.city_municipality || '',
+      province: auth.user.province || '',
+      nearest_landmark: auth.user.nearest_landmark || '',
+    });
+    setProfileErrors({});
+    setEditingProfile(false);
+  };
+
+  // Check if address is incomplete
+  const isAddressIncomplete = () => {
+    const addressFields = ['house_no_street', 'barangay', 'city_municipality', 'province'];
+    return addressFields.every(field => !auth.user[field as keyof typeof auth.user]);
+  };
+
+  // Check if phone number is missing
+  const isPhoneMissing = () => {
+    return !auth.user.phone || auth.user.phone.trim() === '';
   };
 
   const getStatusColor = (status: string) => {
@@ -362,19 +619,7 @@ export default function CustomerDashboard() {
                     <span className="info-value">{auth.user.email}</span>
                   </div>
                 </div>
-                <div className="info-item-compact">
-                  <div className="info-icon">
-                    <Home className="w-4 h-4" />
-                  </div>
-                  <div className="info-details">
-                    <span className="info-label">Home Address</span>
-                    <span className="info-value">
-                      {[auth.user.house_no_street, auth.user.barangay, auth.user.city_municipality, auth.user.province]
-                        .filter(Boolean)
-                        .join(', ') || 'Not provided'}
-                    </span>
-                  </div>
-                </div>
+
               </div>
             </div>
           </div>
@@ -410,6 +655,58 @@ export default function CustomerDashboard() {
                 </div>
               </div>
             </div>
+
+            {/* Phone Alert if missing */}
+            {isPhoneMissing() && (
+              <div className="address-alert-card" style={{ marginBottom: '1rem' }}>
+                <div className="alert-content">
+                  <div className="alert-icon">
+                    <AlertCircle className="w-5 h-5 text-yellow-600" />
+                  </div>
+                  <div className="alert-text">
+                    <p className="alert-title">Add Phone Number</p>
+                    <p className="alert-description">Add your phone number so technicians can contact you</p>
+                  </div>
+                  <button 
+                    className="alert-action-btn"
+                    onClick={() => {
+                      setActiveTab('settings');
+                      setShowAccountSettings(true);
+                      setEditingProfile(true);
+                    }}
+                  >
+                    <Phone className="w-4 h-4" />
+                    Add Phone
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Address Alert if not complete */}
+            {isAddressIncomplete() && (
+              <div className="address-alert-card">
+                <div className="alert-content">
+                  <div className="alert-icon">
+                    <AlertCircle className="w-5 h-5 text-yellow-600" />
+                  </div>
+                  <div className="alert-text">
+                    <p className="alert-title">Complete Your Address</p>
+                    <p className="alert-description">Add your address to make booking faster and more accurate</p>
+                  </div>
+                  <button 
+                    className="alert-action-btn"
+                    onClick={() => {
+                      setActiveTab('settings');
+                      setShowAccountSettings(true);
+                      setEditingProfile(true);
+                    }}
+                  >
+                    <MapPin className="w-4 h-4" />
+                    Add Address
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Quick Actions */}
             <div className="quick-actions-compact">
@@ -451,8 +748,10 @@ export default function CustomerDashboard() {
                   <div className="booking-service">
                     <span className="service-type">{booking.service}</span>
                     <div className="booking-details">
-                      <span className="booking-date">{new Date(booking.scheduled_date).toLocaleDateString()}</span>
-                      <span className="booking-timeslot">{booking.timeslot}</span>
+                      <span className="booking-date">{booking.scheduled_start || 'Not scheduled'}</span>
+                      {booking.scheduled_end && (
+                        <span className="booking-end">to {booking.scheduled_end}</span>
+                      )}
                       {booking.technician_name && (
                         <span className="technician-name">Technician: {booking.technician_name}</span>
                       )}
@@ -562,11 +861,11 @@ export default function CustomerDashboard() {
                     <div className="booking-details-grid">
                       <div className="detail-item">
                         <Calendar className="w-4 h-4" />
-                        <span>{new Date(booking.scheduled_date).toLocaleDateString()}</span>
+                        <span>Start: {booking.scheduled_start || 'Not scheduled'}</span>
                       </div>
                       <div className="detail-item">
                         <Clock className="w-4 h-4" />
-                        <span>{booking.timeslot}</span>
+                        <span>End: {booking.scheduled_end || 'Not scheduled'}</span>
                       </div>
                       <div className="detail-item">
                         <MapPin className="w-4 h-4" />
@@ -600,7 +899,7 @@ export default function CustomerDashboard() {
                   {['pending', 'confirmed'].includes(booking.status) && (
                     <button 
                       className="action-btn cancel"
-                      onClick={() => handleRequestCancellation(booking.booking_number)}
+                      onClick={() => handleRequestCancellation(booking.id)}
                     >
                       Request Cancellation
                     </button>
@@ -763,35 +1062,114 @@ export default function CustomerDashboard() {
       </div>
 
       <div className="help-content">
-        <div className="coming-soon-card">
-          <div className="coming-soon-icon">
-            <MessageCircle className="w-16 h-16" />
+        {/* Combined Support Card */}
+        <div className="info-card" style={{ marginBottom: 24, padding: 20, borderRadius: 16, boxShadow: '0 10px 25px rgba(2,6,23,0.25)' }}>
+          {/* header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 12, borderBottom: '1px solid rgba(148,163,184,0.15)' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 9, background: '#0ea5e91a', display: 'grid', placeItems: 'center' }}>
+              <MessageCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Kamotech Assistant & Support</h2>
+              <p style={{ margin: 0, color: '#94a3b8', fontSize: 13 }}>Reach us directly or chat with our assistant for instant help.</p>
+            </div>
           </div>
-          <div className="coming-soon-content">
-            <h2 className="coming-soon-title">Help & Support</h2>
-            <p className="coming-soon-subtitle">
-              We're working hard to bring you comprehensive help and support features.
-            </p>
-            <div className="coming-soon-features">
-              <div className="feature-item">
-                <CheckCircle className="w-5 h-5" />
-                <span>Frequently Asked Questions (FAQ)</span>
-              </div>
-              <div className="feature-item">
-                <CheckCircle className="w-5 h-5" />
-                <span>Live Chat Support</span>
-              </div>
-              <div className="feature-item">
-                <CheckCircle className="w-5 h-5" />
-                <span>Video Tutorials</span>
-              </div>
-              <div className="feature-item">
-                <CheckCircle className="w-5 h-5" />
-                <span>Contact Support Team</span>
+
+          {/* content */}
+          <div style={{ display: 'flex', gap: 28, paddingTop: 16, flexWrap: 'wrap' }}>
+            {/* Contact */}
+            <div style={{ minWidth: 320, flex: '1 1 320px' }}>
+              <div style={{ background: 'transparent', border: '1px solid rgba(148,163,184,0.15)', borderRadius: 12, padding: 16, display: 'grid', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 8, background: '#0ea5e91a', display: 'grid', placeItems: 'center', color: '#0ea5e9' }}>
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', letterSpacing: '.08em' }}>EMAIL</div>
+                    <a href="mailto:support@kamotech.com" style={{ fontWeight: 600, color: 'inherit' }}>support@kamotech.com</a>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 8, background: '#0ea5e91a', display: 'grid', placeItems: 'center', color: '#0ea5e9' }}>
+                    <Phone className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', letterSpacing: '.08em' }}>CONTACT NUMBER</div>
+                    <a href="tel:+639074452484" style={{ fontWeight: 600, color: 'inherit' }}>(+63) 907-445-2484</a>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="coming-soon-status">
-              <span className="status-badge">Coming Soon</span>
+
+            {/* Chatbot */}
+            <div style={{ minWidth: 360, flex: '2 1 360px', display: 'grid', gap: 8 }}>
+              <h3 style={{ margin: 0, fontWeight: 800, fontSize: 20 }}>Kamotech Assistant Chatbot</h3>
+              <p style={{ margin: 0, color: '#94a3b8' }}>Ask FAQ questions and get guided help with service booking.</p>
+              <div className="help-actions" style={{ marginTop: 4 }}>
+                <button 
+                  className="chat-quick-link"
+                  onClick={() => {
+                  console.log('Attempting to open Botpress chat...');
+                  console.log('window.botpressWebChat:', window.botpressWebChat);
+                  console.log('window.botpress:', (window as any).botpress);
+                  
+                  // Trigger Botpress chatbot
+                  // Try multiple methods as Botpress v3 might use different APIs
+                  if (window.botpressWebChat) {
+                    console.log('Found window.botpressWebChat');
+                    if (typeof window.botpressWebChat.open === 'function') {
+                      window.botpressWebChat.open();
+                    } else if (typeof window.botpressWebChat.toggle === 'function') {
+                      window.botpressWebChat.toggle();
+                    } else if (window.botpressWebChat.widget && typeof window.botpressWebChat.widget.open === 'function') {
+                      window.botpressWebChat.widget.open();
+                    } else {
+                      console.log('No known method found on botpressWebChat:', window.botpressWebChat);
+                    }
+                  } else if ((window as any).botpress) {
+                    console.log('Found window.botpress');
+                    // Try the global botpress object
+                    if (typeof (window as any).botpress.open === 'function') {
+                      (window as any).botpress.open();
+                    }
+                  } else {
+                    console.log('Botpress objects not found, trying to find button...');
+                    // Try to trigger the default Botpress button click
+                    const botpressButton = document.querySelector('[aria-label="Open chat window"]') || 
+                                          document.querySelector('.bpw-widget-btn') ||
+                                          document.querySelector('[id*="botpress"]') ||
+                                          document.querySelector('[class*="botpress"]');
+                    if (botpressButton) {
+                      console.log('Found Botpress button:', botpressButton);
+                      (botpressButton as HTMLElement).click();
+                    } else {
+                      console.log('Botpress chat button not found.');
+                      // Try looking for all elements with Botpress-related attributes
+                      const allElements = document.querySelectorAll('*');
+                      const botpressElements = Array.from(allElements).filter(el => 
+                        el.id?.includes('botpress') || 
+                        el.className?.toString().includes('botpress') ||
+                        el.className?.toString().includes('bpw')
+                      );
+                      console.log('Found Botpress-related elements:', botpressElements);
+                    }
+                  }
+                  }}
+                  title="Ask Kamotech Assistant"
+                  style={{
+                    background: '#0ea5e9',
+                    color: 'white',
+                    padding: '0.5rem 1rem',
+                    borderRadius: 8,
+                    fontWeight: 600
+                  }}
+                >
+                  Ask Kamotech Assistant
+                </button>
+                <p style={{ marginTop: 8, fontSize: 12, color: '#64748b' }}>
+                  Our chatbot can answer FAQ questions and guide you with service booking.
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -838,10 +1216,14 @@ export default function CustomerDashboard() {
                 <label>Full Name</label>
                 <input 
                   type="text" 
-                  value={auth.user.name}
+                  value={editingProfile ? profileData.name : auth.user.name}
+                  onChange={(e) => handleProfileChange('name', e.target.value)}
                   disabled={!editingProfile}
-                  className="profile-input"
+                  className={`profile-input ${profileErrors.name ? 'error' : ''}`}
                 />
+                {profileErrors.name && (
+                  <span className="error-message">{profileErrors.name}</span>
+                )}
               </div>
             </div>
           </div>
@@ -861,18 +1243,30 @@ export default function CustomerDashboard() {
               <input 
                 type="email" 
                 value={auth.user.email}
-                disabled={!editingProfile}
+                disabled={true}
                 className="profile-input"
+                title="Email cannot be changed"
               />
             </div>
             <div className="field-group">
               <label>Mobile Phone</label>
               <input 
                 type="tel" 
-                value={auth.user.phone || ''}
+                value={editingProfile ? profileData.phone : (auth.user.phone || '')}
+                onChange={(e) => handleProfileChange('phone', e.target.value)}
                 disabled={!editingProfile}
-                className="profile-input"
+                className={`profile-input ${profileErrors.phone ? 'error' : ''}`}
+                placeholder="09XX-XXX-XXXX"
+                maxLength={13}
               />
+              {!profileErrors.phone && editingProfile && (
+                <span className="field-hint" style={{ fontSize: '0.8rem', color: '#666' }}>
+                  Philippine mobile format (e.g., 0917-123-4567)
+                </span>
+              )}
+              {profileErrors.phone && (
+                <span className="error-message">{profileErrors.phone}</span>
+              )}
             </div>
           </div>
         </div>
@@ -881,50 +1275,130 @@ export default function CustomerDashboard() {
         <div className="settings-card">
           <div className="card-header">
             <h2 className="card-title">
-              <Home className="w-5 h-5" />
-              Home Address
+              <MapPin className="w-5 h-5" />
+              Address Information
+              {isAddressIncomplete() && (
+                <span className="incomplete-badge">Incomplete</span>
+              )}
             </h2>
           </div>
           <div className="address-fields">
-            <div className="address-row">
-              <div className="field-group">
-                <label>House Number</label>
-                <input 
-                  type="text" 
-                  value={auth.user.house_no_street || ''}
-                  disabled={!editingProfile}
-                  className="profile-input"
-                />
+            {profileErrors.address && (
+              <div className="address-error-message">
+                <AlertCircle className="w-4 h-4" />
+                {profileErrors.address}
               </div>
-              <div className="field-group">
-                <label>Street</label>
-                <input 
-                  type="text" 
-                  value={auth.user.house_no_street || ''}
-                  disabled={!editingProfile}
-                  className="profile-input"
-                />
-              </div>
+            )}
+            <div className="field-group">
+              <label>House No. & Street</label>
+              <input 
+                type="text" 
+                value={editingProfile ? profileData.house_no_street : (auth.user.house_no_street || '')}
+                onChange={(e) => handleProfileChange('house_no_street', e.target.value)}
+                disabled={!editingProfile}
+                className={`profile-input ${profileErrors.house_no_street ? 'error' : ''}`}
+                placeholder="e.g., 123 Main Street"
+              />
+              {profileErrors.house_no_street && (
+                <span className="error-message">{profileErrors.house_no_street}</span>
+              )}
             </div>
-            <div className="address-row">
-              <div className="field-group">
-                <label>Barangay</label>
-                <input 
-                  type="text" 
-                  value={auth.user.barangay || ''}
+            {/* Province first */}
+            <div className="field-group">
+              <label>Province</label>
+              <div className="autocomplete-container">
+                <input
+                  type="text"
+                  value={editingProfile ? profileData.province : (auth.user.province || '')}
+                  onChange={(e) => handleProfileAddressInputChange('province', e.target.value)}
+                  className={`profile-input ${profileErrors.province ? 'error' : ''}`}
+                  placeholder="Enter province"
+                  autoComplete="off"
                   disabled={!editingProfile}
-                  className="profile-input"
                 />
+                {profileProvinceSuggestions && profileProvinceSuggestions.length > 0 && (
+                  <div className="autocomplete-suggestions">
+                    {profileProvinceSuggestions.map((s, i) => (
+                      <div key={i} className="autocomplete-item" onClick={() => selectProfileSuggestion('province', s)}>
+                        {s}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="field-group">
-                <label>Municipality</label>
-                <input 
-                  type="text" 
-                  value={auth.user.city_municipality || ''}
+              {profileErrors.province && (
+                <span className="error-message">{profileErrors.province}</span>
+              )}
+            </div>
+
+            {/* City next */}
+            <div className="field-group">
+              <label>City/Municipality</label>
+              <div className="autocomplete-container">
+                <input
+                  type="text"
+                  value={editingProfile ? profileData.city_municipality : (auth.user.city_municipality || '')}
+                  onChange={(e) => handleProfileAddressInputChange('municipality', e.target.value)}
+                  className={`profile-input ${profileErrors.city_municipality ? 'error' : ''}`}
+                  placeholder="Enter city/municipality"
+                  autoComplete="off"
                   disabled={!editingProfile}
-                  className="profile-input"
                 />
+                {profileMunicipalitySuggestions && profileMunicipalitySuggestions.length > 0 && (
+                  <div className="autocomplete-suggestions">
+                    {profileMunicipalitySuggestions.map((s, i) => (
+                      <div key={i} className="autocomplete-item" onClick={() => selectProfileSuggestion('municipality', s)}>
+                        {s}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+              {profileErrors.city_municipality && (
+                <span className="error-message">{profileErrors.city_municipality}</span>
+              )}
+            </div>
+
+            {/* Barangay last */}
+            <div className="field-group">
+              <label>Barangay</label>
+              <div className="autocomplete-container">
+                <input
+                  type="text"
+                  value={editingProfile ? profileData.barangay : (auth.user.barangay || '')}
+                  onChange={(e) => handleProfileAddressInputChange('barangay', e.target.value)}
+                  className={`profile-input ${profileErrors.barangay ? 'error' : ''}`}
+                  placeholder="Enter barangay"
+                  autoComplete="off"
+                  disabled={!editingProfile}
+                />
+                {profileBarangaySuggestions && profileBarangaySuggestions.length > 0 && (
+                  <div className="autocomplete-suggestions">
+                    {profileBarangaySuggestions.map((s, i) => (
+                      <div key={i} className="autocomplete-item" onClick={() => selectProfileSuggestion('barangay', s)}>
+                        {s}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {profileErrors.barangay && (
+                <span className="error-message">{profileErrors.barangay}</span>
+              )}
+            </div>
+            <div className="field-group">
+              <label>Nearest Landmark (Optional)</label>
+              <input 
+                type="text" 
+                value={editingProfile ? profileData.nearest_landmark : (auth.user.nearest_landmark || '')}
+                onChange={(e) => handleProfileChange('nearest_landmark', e.target.value)}
+                disabled={!editingProfile}
+                className={`profile-input ${profileErrors.nearest_landmark ? 'error' : ''}`}
+                placeholder="e.g., Near Jollibee, Beside City Hall"
+              />
+              {profileErrors.nearest_landmark && (
+                <span className="error-message">{profileErrors.nearest_landmark}</span>
+              )}
             </div>
           </div>
         </div>
@@ -938,18 +1412,143 @@ export default function CustomerDashboard() {
             </h2>
           </div>
           <div className="security-section">
-            <button className="change-password-btn">
-              Change Password
-            </button>
+            {!showPasswordEditor ? (
+              <button className="change-password-btn" onClick={() => setShowPasswordEditor(true)}>
+                Change Password
+              </button>
+            ) : (
+              <div className="password-form" style={{ display: 'grid', gap: '12px', maxWidth: 560 }}>
+                <div className="field-group">
+                  <label>Current Password</label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showCurrentPwd ? 'text' : 'password'}
+                      value={passwordData.current_password}
+                      onChange={(e) => setPasswordData({ ...passwordData, current_password: e.target.value })}
+                      className={`profile-input ${passwordErrors.current_password ? 'error' : ''}`}
+                      placeholder="Current password"
+                      style={{ paddingRight: 40 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPwd((v) => !v)}
+                      aria-label="Toggle current password visibility"
+                      style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 0, padding: 4, cursor: 'pointer' }}
+                    >
+                      {showCurrentPwd ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  {passwordErrors.current_password && (
+                    <span className="error-message">{passwordErrors.current_password}</span>
+                  )}
+                </div>
+                <div className="field-group">
+                  <label>New Password</label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showNewPwd ? 'text' : 'password'}
+                      value={passwordData.password}
+                      onChange={(e) => setPasswordData({ ...passwordData, password: e.target.value })}
+                      className={`profile-input ${passwordErrors.password ? 'error' : ''}`}
+                      placeholder="New password"
+                      style={{ paddingRight: 40 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPwd((v) => !v)}
+                      aria-label="Toggle new password visibility"
+                      style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 0, padding: 4, cursor: 'pointer' }}
+                    >
+                      {showNewPwd ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  {passwordErrors.password && (
+                    <span className="error-message">{passwordErrors.password}</span>
+                  )}
+                </div>
+                <div className="field-group">
+                  <label>Confirm Password</label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showConfirmPwd ? 'text' : 'password'}
+                      value={passwordData.password_confirmation}
+                      onChange={(e) => setPasswordData({ ...passwordData, password_confirmation: e.target.value })}
+                      className={`profile-input ${passwordErrors.password_confirmation ? 'error' : ''}`}
+                      placeholder="Confirm new password"
+                      style={{ paddingRight: 40 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPwd((v) => !v)}
+                      aria-label="Toggle confirm password visibility"
+                      style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 0, padding: 4, cursor: 'pointer' }}
+                    >
+                      {showConfirmPwd ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  {passwordErrors.password_confirmation && (
+                    <span className="error-message">{passwordErrors.password_confirmation}</span>
+                  )}
+                </div>
+
+                <div className="settings-actions">
+                  <button
+                    className="save-btn"
+                    onClick={async () => {
+                      setPasswordErrors({});
+                      setPasswordSaving(true);
+                      try {
+                        // Use POST + _method=PUT for maximum Laravel compatibility
+                        await axios.post('/settings/password', {
+                          ...passwordData,
+                          _method: 'PUT',
+                        });
+                        setToast({ type: 'success', message: 'Password updated successfully.' });
+                        setShowPasswordEditor(false);
+                        setPasswordData({ current_password: '', password: '', password_confirmation: '' });
+                      } catch (error: any) {
+                        const data = error.response?.data;
+                        if (data?.errors) {
+                          setPasswordErrors(data.errors);
+                          const firstMsg = Object.values<string>(data.errors)[0]?.[0] || 'Validation error';
+                          setToast({ type: 'error', message: firstMsg });
+                        } else if (data?.message) {
+                          setToast({ type: 'error', message: data.message });
+                        } else {
+                          setToast({ type: 'error', message: 'Failed to update password.' });
+                        }
+                      } finally {
+                        setPasswordSaving(false);
+                      }
+                    }}
+                    disabled={passwordSaving}
+                  >
+                    {passwordSaving ? 'Saving...' : 'Save Password'}
+                  </button>
+                  <button className="cancel-btn" onClick={() => {
+                    setShowPasswordEditor(false);
+                    setPasswordErrors({});
+                    setPasswordData({ current_password: '', password: '', password_confirmation: '' });
+                  }} disabled={passwordSaving}>Cancel</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {editingProfile && (
           <div className="settings-actions">
-            <button className="save-btn">Save Changes</button>
+            <button 
+              className="save-btn"
+              onClick={saveProfile}
+              disabled={profileSaving}
+            >
+              {profileSaving ? 'Saving...' : 'Save Changes'}
+            </button>
             <button 
               className="cancel-btn"
-              onClick={() => setEditingProfile(false)}
+              onClick={cancelProfileEdit}
+              disabled={profileSaving}
             >
               Cancel
             </button>
@@ -959,45 +1558,6 @@ export default function CustomerDashboard() {
     </div>
   );
 
-  const renderChatbot = () => (
-    <div className="chatbot-overlay">
-      <div className="chatbot-container">
-        <div className="chatbot-header">
-          <h3>Customer Support</h3>
-          <button 
-            className="chatbot-close"
-            onClick={() => setShowChatbot(false)}
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="chatbot-content">
-          <div className="chatbot-message-area">
-            <div className="bot-message">
-              <MessageCircle className="w-5 h-5" />
-              <p>Hello! I'm here to help you with:</p>
-              <ul>
-                <li>Booking policies and procedures</li>
-                <li>Available services and supported brands</li>
-                <li>Scheduling, rescheduling, or canceling bookings</li>
-                <li>Account-related assistance</li>
-                <li>Emergency service requests</li>
-              </ul>
-              <p>How can I assist you today?</p>
-            </div>
-          </div>
-          <div className="chatbot-input-area">
-            <input 
-              type="text" 
-              placeholder="Type your message..."
-              className="chatbot-input"
-            />
-            <button className="chatbot-send">Send</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <>
@@ -1044,16 +1604,6 @@ export default function CustomerDashboard() {
               My Bookings
             </button>
             <button 
-              className={`nav-tab ${activeTab === 'notifications' ? 'active' : ''}`}
-              onClick={() => setActiveTab('notifications')}
-            >
-              <Bell className="w-5 h-5" />
-              Notifications
-              {unreadCount > 0 && (
-                <span className="notification-count">{unreadCount}</span>
-              )}
-            </button>
-            <button 
               className={`nav-tab ${activeTab === 'help' ? 'active' : ''}`}
               onClick={() => setActiveTab('help')}
             >
@@ -1074,22 +1624,77 @@ export default function CustomerDashboard() {
         <div className="dashboard-main">
           {activeTab === 'dashboard' && renderDashboard()}
           {activeTab === 'bookings' && renderBookings()}
-          {activeTab === 'notifications' && renderNotifications()}
           {activeTab === 'help' && renderHelp()}
           {activeTab === 'settings' && renderAccountSettings()}
         </div>
 
-        {/* Chatbot Button */}
-        <button 
-          className="chatbot-toggle"
-          onClick={() => setShowChatbot(true)}
-          title="Customer Support"
-        >
-          <MessageCircle className="w-6 h-6" />
-        </button>
 
-        {/* Chatbot Modal */}
-        {showChatbot && renderChatbot()}
+        {/* Toast */}
+        {toast && (
+          <div 
+            className={`toast ${toast.type}`} 
+            style={{
+              position: 'fixed',
+              right: 16,
+              top: 16,
+              zIndex: 60,
+              background: toast.type === 'success' ? '#16a34a' : '#dc2626',
+              color: 'white',
+              padding: '10px 14px',
+              borderRadius: 8,
+              boxShadow: '0 10px 15px -3px rgba(0,0,0,0.3)',
+              fontWeight: 600,
+              letterSpacing: 0.2,
+            }}
+            onAnimationEnd={() => setToast(null)}
+          >
+            {toast.message}
+          </div>
+        )}
+
+        {/* Cancellation Confirm Modal */}
+        {showCancelConfirm && (
+          <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 50 }}>
+            <div className="modal-container" style={{ maxWidth: 480, margin: '10vh auto', background: '#111827', borderRadius: 12, padding: 20, color: '#e5e7eb' }}>
+              <div className="modal-header" style={{ marginBottom: 12 }}>
+                <h3 style={{ margin: 0 }}>Request Cancellation</h3>
+              </div>
+              <div className="modal-body" style={{ lineHeight: 1.6 }}>
+                <p>Are you sure you want to request cancellation for this booking?</p>
+                <p style={{ fontSize: 13, color: '#9ca3af', marginTop: 8 }}>
+                  Note: Cancellation requests must be made at least 48 hours before the scheduled service time.
+                </p>
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ display: 'block', fontSize: 13, color: '#9ca3af', marginBottom: 6 }}>Reason</label>
+                  <select id="cancelReason" className="form-select" style={{ width: '100%' }} defaultValue="personal">
+                    <option value="personal">Personal</option>
+                    <option value="schedule_conflict">Schedule Conflict</option>
+                    <option value="emergency">Emergency</option>
+                    <option value="weather">Weather</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <textarea id="cancelDetails" className="form-input" placeholder="Briefly explain the reason (min 10 chars)" style={{ width: '100%', marginTop: 8 }} rows={3}></textarea>
+                </div>
+              </div>
+              <div className="modal-actions" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+                <button className="btn btn-secondary" onClick={() => { setShowCancelConfirm(false); setCancelTargetBooking(null); }} disabled={cancelSubmitting}>Cancel</button>
+                <button className="btn btn-primary" onClick={() => {
+                  const reason = (document.getElementById('cancelReason') as HTMLSelectElement)?.value || 'personal';
+                  const details = (document.getElementById('cancelDetails') as HTMLTextAreaElement)?.value || '';
+                  if (details.trim().length < 10) {
+                    setToast({ type: 'error', message: 'Please provide at least 10 characters for details.' });
+                    return;
+                  }
+                  // attach payload globally for confirmCancellation read
+                  (window as any).__cancelPayload = { reason_category: reason, reason_details: details };
+                  confirmCancellation();
+                }} disabled={cancelSubmitting}>
+                  {cancelSubmitting ? 'Submitting...' : 'Confirm Request'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

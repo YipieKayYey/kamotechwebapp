@@ -13,7 +13,7 @@ class EditServicePricing extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            Actions\DeleteAction::make(),
+            // Delete action disabled as per panelist requirement
         ];
     }
 }

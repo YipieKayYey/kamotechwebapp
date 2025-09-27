@@ -115,14 +115,11 @@ class ReviewCategoryResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make()
-                    ->requiresConfirmation()
-                    ->modalDescription('Are you sure you want to delete this category? This will also delete all related scores.'),
+                // Delete action disabled as per panelist requirement
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make()
-                        ->requiresConfirmation(),
+                    // Delete actions disabled as per panelist requirement
                 ]),
             ])
             ->defaultSort('sort_order', 'asc');

@@ -2,6 +2,7 @@ import { type SharedData } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
 import { PublicNavigation } from '@/components/public-navigation';
 import { PublicFooter } from '@/components/public-footer';
+import InteractiveMap from '@/components/InteractiveMap';
 import { Phone, Mail, Clock, MapPin, Facebook, MessageCircle, Map } from 'lucide-react';
 
 export default function Contact() {
@@ -153,17 +154,7 @@ export default function Contact() {
                             <div className="contact-map-content">
                                 <h3 className="contact-map-subtitle">Service Coverage Map</h3>
                                 <div className="contact-map-container">
-                                    <div className="contact-map-wrapper">
-                                        <img 
-                                            src="/images/bataan-map.png.png" 
-                                            alt="Bataan Service Coverage Map" 
-                                            className="contact-map-image"
-                                        />
-                                        <div className="contact-map-overlay">
-                                            <Map className="contact-map-overlay-icon" />
-                                            <span>Bataan Province Coverage</span>
-                                        </div>
-                                    </div>
+                                    <InteractiveMap />
                                 </div>
                             </div>
                         </div>

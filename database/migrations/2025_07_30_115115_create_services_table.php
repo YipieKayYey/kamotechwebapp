@@ -17,6 +17,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->decimal('base_price', 10, 2);
             $table->integer('duration_minutes')->default(60);
+            $table->integer('prep_minutes')->default(60);
             $table->boolean('is_active')->default(true);
             $table->string('category')->default('maintenance');
             $table->timestamps();

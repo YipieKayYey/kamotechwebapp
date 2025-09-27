@@ -262,7 +262,7 @@ class RatingReviewResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    // Delete actions disabled as per panelist requirement
                 ]),
             ]);
     }

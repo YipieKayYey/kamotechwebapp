@@ -1,87 +1,90 @@
 import { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { route } from 'ziggy-js';
 
-interface SlideData {
+interface Promotion {
     id: number;
-    backgroundImage: string;
-    welcome: string;
+    welcome_text: string | null;
     title: string;
-    subtitle: string;
-    primaryButton: {
-        text: string;
-        href: string;
-    };
-    secondaryButton: {
-        text: string;
-        href: string;
-    };
+    subtitle: string | null;
+    primary_button_text: string;
+    primary_button_link: string;
+    secondary_button_text: string | null;
+    secondary_button_link: string | null;
+    background_image: string | null;
+    discount: string | null;
+    promo_code: string | null;
 }
 
-const slides: SlideData[] = [
+interface HeroSliderProps {
+    promotions?: Promotion[];
+}
+
+// Fallback slides using all 4 public slide images
+const fallbackSlides: Promotion[] = [
     {
         id: 1,
-        backgroundImage: '/images/slide/1.jpg',
-        welcome: 'Kamotech Aircon Services',
+        welcome_text: 'Kamotech Aircon Services',
         title: 'PRICE STARTS AT 450 PESOS!',
         subtitle: 'Find the affordable, Find your satisfaction!',
-        primaryButton: {
-            text: 'BOOK NOW',
-            href: '/booking'
-        },
-        secondaryButton: {
-            text: 'SIGN UP',
-            href: route('register')
-        }
+        primary_button_text: 'BOOK NOW',
+        primary_button_link: '/booking',
+        secondary_button_text: 'SIGN UP',
+        secondary_button_link: '/register',
+        background_image: '/images/slide/1.jpg',
+        discount: null,
+        promo_code: null
     },
     {
         id: 2,
-        backgroundImage: '/images/slide/2.jpg',
-        welcome: 'Reliable Aircon Services Anytime, Anywhere',
+        welcome_text: 'Professional AC Services',
         title: 'FREE SURVEY & FREE CHECKUP!',
         subtitle: 'Cleaning • Repair • Freon Charging • Installation • Relocation & More',
-        primaryButton: {
-            text: 'GET QUOTE',
-            href: route('booking')
-        },
-        secondaryButton: {
-            text: 'LEARN MORE',
-            href: '#services'
-        }
+        primary_button_text: 'GET QUOTE',
+        primary_button_link: '/booking',
+        secondary_button_text: 'LEARN MORE',
+        secondary_button_link: '#services',
+        background_image: '/images/slide/2.jpg',
+        discount: 'FREE SERVICE',
+        promo_code: 'FREECHECK'
     },
     {
         id: 3,
-        backgroundImage: '/images/slide/3.jpg',
-        welcome: 'Celebrate the Start of the Ber Months',
-        title: 'BER MONTHS KICKOFF SALE – SEPT 30–OCT 1',
-        subtitle: 'Aircon Cleaning Starts at ₱450 • Free Survey & Checkup',
-        primaryButton: {
-            text: 'VIEW SERVICES',
-            href: '#services'
-        },
-        secondaryButton: {
-            text: 'CONTACT US',
-            href: '#contact'
-        }
+        welcome_text: 'Quality & Reliability',
+        title: 'EXPERT TECHNICIANS',
+        subtitle: 'Licensed professionals with years of experience in AC maintenance and repair',
+        primary_button_text: 'BOOK SERVICE',
+        primary_button_link: '/booking',
+        secondary_button_text: 'VIEW SERVICES',
+        secondary_button_link: '/services',
+        background_image: '/images/slide/3.jpg',
+        discount: null,
+        promo_code: null
     },
     {
         id: 4,
-        backgroundImage: '/images/slide/4.jpg',
-        welcome: 'New Customers Get More Savings',
-        title: 'GET 10% OFF YOUR FIRST SERVICE',
-        subtitle: 'Book today and experience professional, affordable aircon care.',
-        primaryButton: {
-            text: 'SCHEDULE NOW',
-            href: '#booking'
-        },
-        secondaryButton: {
-            text: 'LEARN MORE',
-            href: '#contact'
-        }
-    },
+        welcome_text: 'Fast & Efficient',
+        title: '24/7 EMERGENCY SERVICE',
+        subtitle: 'Quick response time for urgent AC repairs and maintenance needs',
+        primary_button_text: 'EMERGENCY CALL',
+        primary_button_link: '/booking?urgent=1',
+        secondary_button_text: 'CONTACT US',
+        secondary_button_link: '/contact',
+        background_image: '/images/slide/4.jpg',
+        discount: null,
+        promo_code: null
+    }
 ];
 
-export function HeroSlider() {
+export function HeroSlider({ promotions = [] }: HeroSliderProps) {
+    // If we have fewer than 2 promos, use the predefined fallback set so the slider can rotate
+    const defaultImages = ['/images/slide/1.jpg', '/images/slide/2.jpg', '/images/slide/3.jpg', '/images/slide/4.jpg'];
+    const useFallback = !promotions || promotions.length < 2;
+    const slides = useFallback ? fallbackSlides : promotions.map((p, i) => ({
+        ...p,
+        background_image: p.background_image || defaultImages[i % defaultImages.length],
+    }));
     const [currentSlide, setCurrentSlide] = useState(0);
     const [isAutoPlaying, setIsAutoPlaying] = useState(true);
 
@@ -94,7 +97,7 @@ export function HeroSlider() {
         }, 5000); // Change slide every 5 seconds
 
         return () => clearInterval(interval);
-    }, [isAutoPlaying]);
+    }, [isAutoPlaying, slides.length]);
 
     const goToSlide = (index: number) => {
         setCurrentSlide(index);
@@ -122,7 +125,7 @@ export function HeroSlider() {
                             backgroundImage: `linear-gradient(
                               rgba(0, 63, 107, 0.5), 
                               rgba(30, 64, 175, 0.5)
-                            ), url(${slide.backgroundImage})`,
+                            ), url(${slide.background_image || defaultImages[index % defaultImages.length]})`,
                             backgroundSize: "cover",
                             backgroundPosition: "center"
                           }}                      
@@ -130,30 +133,46 @@ export function HeroSlider() {
                         <div className="slide-overlay"></div>
                         <div className="slide-container">
                             <div className="slide-content">
-                                <p className="slide-welcome">{slide.welcome}</p>
+                                {slide.welcome_text && (
+                                    <p className="slide-welcome">{slide.welcome_text}</p>
+                                )}
                                 <h1 className="slide-title">{slide.title}</h1>
-                                <p className="slide-subtitle">{slide.subtitle}</p>
+                                {slide.subtitle && (
+                                    <p className="slide-subtitle">{slide.subtitle}</p>
+                                )}
                                 <div className="slide-buttons">
-                                    <a 
-                                        href={slide.primaryButton.href} 
-                                        className="slide-btn slide-btn-primary"
-                                    >
-                                        {slide.primaryButton.text}
-                                    </a>
-                                    {slide.secondaryButton.href.startsWith('/') ? (
+                                    {slide.primary_button_link.startsWith('/') && !slide.primary_button_link.startsWith('/#') ? (
                                         <Link 
-                                            href={route(slide.secondaryButton.href.slice(1))} 
-                                            className="slide-btn slide-btn-secondary"
+                                            href={slide.primary_button_link} 
+                                            className="slide-btn slide-btn-primary"
                                         >
-                                            {slide.secondaryButton.text}
+                                            {slide.primary_button_text}
                                         </Link>
                                     ) : (
                                         <a 
-                                            href={slide.secondaryButton.href} 
-                                            className="slide-btn slide-btn-secondary"
+                                            href={slide.primary_button_link} 
+                                            className="slide-btn slide-btn-primary"
                                         >
-                                            {slide.secondaryButton.text}
+                                            {slide.primary_button_text}
                                         </a>
+                                    )}
+                                    
+                                    {slide.secondary_button_text && slide.secondary_button_link && (
+                                        slide.secondary_button_link.startsWith('/') && !slide.secondary_button_link.startsWith('/#') ? (
+                                            <Link 
+                                                href={slide.secondary_button_link} 
+                                                className="slide-btn slide-btn-secondary"
+                                            >
+                                                {slide.secondary_button_text}
+                                            </Link>
+                                        ) : (
+                                            <a 
+                                                href={slide.secondary_button_link} 
+                                                className="slide-btn slide-btn-secondary"
+                                            >
+                                                {slide.secondary_button_text}
+                                            </a>
+                                        )
                                     )}
                                 </div>
                             </div>

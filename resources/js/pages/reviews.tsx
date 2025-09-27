@@ -5,153 +5,49 @@ import { PublicFooter } from '@/components/public-footer';
 import { Star, Filter, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
-export default function Reviews() {
-    const { auth } = usePage<SharedData>().props;
+interface Review {
+    id: number;
+    rating: number;
+    text: string;
+    author: string;
+    avatar: string;
+    service: string;
+    technician: string;
+    date: string;
+    location: string;
+}
+
+interface ReviewStats {
+    totalReviews: number;
+    averageRating: number;
+    fiveStarCount: number;
+    fourStarCount: number;
+}
+
+interface ReviewsProps {
+    auth: SharedData['auth'];
+    allReviews: Review[];
+    reviewStats: ReviewStats;
+}
+
+export default function Reviews({ auth, allReviews, reviewStats }: ReviewsProps) {
     const [filterBy, setFilterBy] = useState('all');
     const [sortBy, setSortBy] = useState('newest');
 
-    // Comprehensive review data
-    const allReviews = [
-        {
-            id: 1,
-            rating: 5,
-            text: "Excellent service! The technician arrived on time and fixed our AC quickly. Very professional and clean work. Our aircon is cooling better than before!",
-            author: "Maria Santos",
-            avatar: "M",
-            service: "Repair",
-            technician: "Mark Anthony Reyes",
-            date: "2024-01-15",
-            location: "Balanga, Bataan"
-        },
-        {
-            id: 2,
-            rating: 5,
-            text: "Ayos ang pagkakalagay-gawa. Malamig na ulit, ang sara na ng tulog neto. Salamat!",
-            author: "Francis Karl",
-            avatar: "F",
-            service: "Repair",
-            technician: "Mark Anthony Reyes",
-            date: "2024-01-12",
-            location: "Mariveles, Bataan"
-        },
-        {
-            id: 3,
-            rating: 5,
-            text: "Ang linis ng pagkakalagay. Ang lamig ulit ng aircon namin pagkatapos nindan. Masayos kausap ang mga staff at mabilis din silang natapos. Ganda ng serbisyo!",
-            author: "Sample Customer",
-            avatar: "S",
-            service: "Cleaning",
-            technician: "Mark Anthony Reyes",
-            date: "2024-01-10",
-            location: "Orani, Bataan"
-        },
-        {
-            id: 4,
-            rating: 5,
-            text: "Professional installation service. The team was very knowledgeable and explained everything clearly. Our new split-type AC is working perfectly!",
-            author: "Roberto Cruz",
-            avatar: "R",
-            service: "Installation",
-            technician: "John Carlo Mendoza",
-            date: "2024-01-08",
-            location: "Dinalupihan, Bataan"
-        },
-        {
-            id: 5,
-            rating: 4,
-            text: "Good service overall. The freon charging was done efficiently. Only took about an hour. AC is cooling much better now. Will definitely recommend Kamotech.",
-            author: "Anna Reyes",
-            avatar: "A",
-            service: "Freon Charging",
-            technician: "Mark Anthony Reyes",
-            date: "2024-01-05",
-            location: "Hermosa, Bataan"
-        },
-        {
-            id: 6,
-            rating: 5,
-            text: "Amazing troubleshooting skills! They quickly identified the problem and fixed it. Very reasonable pricing and excellent customer service.",
-            author: "Jose Martinez",
-            avatar: "J",
-            service: "Troubleshooting",
-            technician: "John Carlo Mendoza",
-            date: "2024-01-03",
-            location: "Bagac, Bataan"
-        },
-        {
-            id: 7,
-            rating: 5,
-            text: "Perfect repiping job! The old pipes were completely replaced with high-quality materials. No more leaks and the cooling is so much better.",
-            author: "Carmen Torres",
-            avatar: "C",
-            service: "Repiping",
-            technician: "Mark Anthony Reyes",
-            date: "2024-01-01",
-            location: "Morong, Bataan"
-        },
-        {
-            id: 8,
-            rating: 5,
-            text: "Smooth relocation service. They carefully moved our AC unit to the new room without any damage. Works perfectly in the new location!",
-            author: "Miguel Garcia",
-            avatar: "M",
-            service: "Relocation",
-            technician: "John Carlo Mendoza",
-            date: "2023-12-28",
-            location: "Samal, Bataan"
-        },
-        {
-            id: 9,
-            rating: 4,
-            text: "Very satisfied with the cleaning service. The team was thorough and professional. My AC is running quieter and cooler now.",
-            author: "Linda Flores",
-            avatar: "L",
-            service: "Cleaning",
-            technician: "Mark Anthony Reyes",
-            date: "2023-12-25",
-            location: "Abucay, Bataan"
-        },
-        {
-            id: 10,
-            rating: 5,
-            text: "Outstanding repair work! They fixed our old AC that other companies said was beyond repair. Great value for money. Highly recommended!",
-            author: "David Villanueva",
-            avatar: "D",
-            service: "Repair",
-            technician: "John Carlo Mendoza",
-            date: "2023-12-22",
-            location: "Orion, Bataan"
-        },
-        {
-            id: 11,
-            rating: 5,
-            text: "Professional installation from start to finish. Clean work, no mess left behind. The AC is cooling our entire living room perfectly.",
-            author: "Grace Mendoza",
-            avatar: "G",
-            service: "Installation",
-            technician: "Mark Anthony Reyes",
-            date: "2023-12-20",
-            location: "Pilar, Bataan"
-        },
-        {
-            id: 12,
-            rating: 4,
-            text: "Quick and efficient freon charging service. The technician explained what was needed and completed the work promptly. Good experience overall.",
-            author: "Pedro Aquino",
-            avatar: "P",
-            service: "Freon Charging",
-            technician: "John Carlo Mendoza",
-            date: "2023-12-18",
-            location: "Limay, Bataan"
-        }
-    ];
+    const getFirstName = (fullName?: string | null): string => {
+        if (!fullName) return '';
+        const trimmed = String(fullName).trim();
+        if (!trimmed) return '';
+        return trimmed.split(' ')[0];
+    };
 
     // Filter reviews based on selected criteria
     const filteredReviews = allReviews.filter(review => {
         if (filterBy === 'all') return true;
         if (filterBy === '5-star') return review.rating === 5;
         if (filterBy === '4-star') return review.rating === 4;
-        return review.service.toLowerCase() === filterBy.toLowerCase();
+        // Exact match for service names
+        return review.service === filterBy;
     });
 
     // Sort reviews
@@ -170,10 +66,11 @@ export default function Reviews() {
         });
     };
 
-    const averageRating = allReviews.reduce((sum, review) => sum + review.rating, 0) / allReviews.length;
-    const totalReviews = allReviews.length;
-    const fiveStarCount = allReviews.filter(r => r.rating === 5).length;
-    const fourStarCount = allReviews.filter(r => r.rating === 4).length;
+    // Use stats from props
+    const averageRating = reviewStats.averageRating || 0;
+    const totalReviews = reviewStats.totalReviews || 0;
+    const fiveStarCount = reviewStats.fiveStarCount || 0;
+    const fourStarCount = reviewStats.fourStarCount || 0;
 
     return (
         <>
@@ -233,13 +130,13 @@ export default function Reviews() {
                                     <option value="all">All Reviews</option>
                                     <option value="5-star">5 Star Reviews</option>
                                     <option value="4-star">4 Star Reviews</option>
-                                    <option value="cleaning">AC Cleaning</option>
-                                    <option value="repair">AC Repair</option>
-                                    <option value="installation">AC Installation</option>
-                                    <option value="freon charging">Freon Charging</option>
-                                    <option value="troubleshooting">Troubleshooting</option>
-                                    <option value="repiping">Repiping</option>
-                                    <option value="relocation">Relocation</option>
+                                    <option value="AC Cleaning">AC Cleaning</option>
+                                    <option value="AC Repair">AC Repair</option>
+                                    <option value="AC Installation">AC Installation</option>
+                                    <option value="Freon Charging">Freon Charging</option>
+                                    <option value="Troubleshooting">Troubleshooting</option>
+                                    <option value="Repiping">Repiping</option>
+                                    <option value="Relocation">Relocation</option>
                                 </select>
                             </div>
 
@@ -267,36 +164,42 @@ export default function Reviews() {
 
                         {/* Reviews Grid */}
                         <div className="reviews-grid">
-                            {sortedReviews.map((review) => (
-                                <div key={review.id} className="review-card">
-                                    <div className="review-header">
-                                        <div className="review-stars">
-                                            {[1, 2, 3, 4, 5].map((star) => (
-                                                <Star 
-                                                    key={star} 
-                                                    className={`star ${star <= review.rating ? 'filled' : ''}`}
-                                                />
-                                            ))}
-                                        </div>
-                                        <div className="review-date">
-                                            {formatDate(review.date)}
-                                        </div>
-                                    </div>
-                                    
-                                    <p className="review-text">"{review.text}"</p>
-                                    
-                                    <div className="review-author">
-                                        <div className="author-avatar">{review.avatar}</div>
-                                        <div className="author-info">
-                                            <div className="author-name">{review.author}</div>
-                                            <div className="author-service">
-                                                {review.service} | Technician: {review.technician}
-                                            </div>
-                                            <div className="author-location">{review.location}</div>
-                                        </div>
-                                    </div>
+                            {sortedReviews.length === 0 ? (
+                                <div className="no-reviews">
+                                    <p>No reviews found matching your criteria.</p>
                                 </div>
-                            ))}
+                            ) : (
+                                sortedReviews.map((review) => (
+                                    <div key={review.id} className="review-card">
+                                        <div className="review-header">
+                                            <div className="review-stars">
+                                                {[1, 2, 3, 4, 5].map((star) => (
+                                                    <Star 
+                                                        key={star} 
+                                                        className={`star ${star <= review.rating ? 'filled' : ''}`}
+                                                    />
+                                                ))}
+                                            </div>
+                                            <div className="review-date">
+                                                {formatDate(review.date)}
+                                            </div>
+                                        </div>
+                                        
+                                        <p className="review-text">"{review.text}"</p>
+                                        
+                                        <div className="review-author">
+                                            <div className="author-avatar">{review.avatar}</div>
+                                            <div className="author-info">
+                                                <div className="author-name">{getFirstName(review.author)}</div>
+                                                <div className="author-service">
+                                                    {review.service} | Technician: {getFirstName(review.technician)}
+                                                </div>
+                                                <div className="author-location">{review.location}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
 
                         {/* Load More or Pagination could go here */}

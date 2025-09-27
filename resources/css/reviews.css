@@ -320,6 +320,15 @@
     margin: 0;
 }
 
+/* No Reviews Message */
+.no-reviews {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 4rem 2rem;
+    color: #6b7280;
+    font-size: 1.125rem;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .reviews-hero-title {

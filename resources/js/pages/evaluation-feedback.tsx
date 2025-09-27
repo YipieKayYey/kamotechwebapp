@@ -568,13 +568,23 @@ export default function EvaluationFeedback() {
               </div>
               <div style={styles.detailItem}>
                 <Calendar className="w-4 h-4" />
-                <span style={styles.detailLabel}>Date:</span>
-                <span style={styles.detailValue}>{new Date(bookingData.scheduled_date).toLocaleDateString()}</span>
+                <span style={styles.detailLabel}>Scheduled Start:</span>
+                <span style={styles.detailValue}>
+                  {bookingData.scheduled_start_at 
+                    ? new Date(bookingData.scheduled_start_at).toLocaleString()
+                    : (bookingData.scheduled_date ? new Date(bookingData.scheduled_date).toLocaleDateString() : 'Not scheduled')
+                  }
+                </span>
               </div>
               <div style={styles.detailItem}>
                 <Clock className="w-4 h-4" />
-                <span style={styles.detailLabel}>Time:</span>
-                <span style={styles.detailValue}>{bookingData.timeslot}</span>
+                <span style={styles.detailLabel}>Scheduled End:</span>
+                <span style={styles.detailValue}>
+                  {bookingData.scheduled_end_at 
+                    ? new Date(bookingData.scheduled_end_at).toLocaleString()
+                    : 'Not scheduled'
+                  }
+                </span>
               </div>
               <div style={styles.detailItem}>
                 <User className="w-4 h-4" />

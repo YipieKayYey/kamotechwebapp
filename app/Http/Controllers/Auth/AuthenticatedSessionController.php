@@ -21,6 +21,7 @@ class AuthenticatedSessionController extends Controller
         return Inertia::render('auth/login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => $request->session()->get('status'),
+            'recaptcha_site_key' => app()->environment('production') ? config('recaptcha.site_key') : null,
         ]);
     }
 
@@ -35,16 +36,23 @@ class AuthenticatedSessionController extends Controller
 
         // Get the authenticated user
         $user = auth()->user();
-        
-        // Redirect based on user role
-        $redirectRoute = match($user->role) {
-            'admin' => '/admin',
-            'technician' => route('technician.dashboard', absolute: false),
-            'customer' => route('customer-dashboard', absolute: false),
-            default => route('customer-dashboard', absolute: false),
-        };
 
-        return redirect()->intended($redirectRoute);
+        // Check if customer needs email verification
+        if ($user->role === 'customer' && ! $user->hasVerifiedEmail()) {
+            return redirect()->route('auth.verify-otp')
+                ->with('status', 'Please verify your email address before accessing your dashboard. Check your email for the verification code.');
+        }
+
+        // Redirect based on user role
+        switch ($user->role) {
+            case 'admin':
+                return redirect('/admin');
+            case 'technician':
+                return redirect('/technician');
+            case 'customer':
+            default:
+                return redirect()->intended(route('customer-dashboard', absolute: false));
+        }
     }
 
     /**

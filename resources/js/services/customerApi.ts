@@ -25,8 +25,10 @@ export interface BookingItem {
     aircon_type: string;
     number_of_units: number;
     ac_brand?: string;
-    scheduled_date: string;
-    timeslot: string;
+    scheduled_start?: string;  // Dynamic scheduling
+    scheduled_end?: string;    // Dynamic scheduling
+    scheduled_date?: string;   // Kept for backwards compatibility
+    timeslot?: string;         // Kept for backwards compatibility
     status: string;
     total_amount: number;
     payment_status: string;
@@ -43,8 +45,10 @@ export interface UpcomingBooking {
     id: number;
     booking_number: string;
     service: string;
-    scheduled_date: string;
-    timeslot: string;
+    scheduled_start?: string;  // Dynamic scheduling
+    scheduled_end?: string;    // Dynamic scheduling
+    scheduled_date?: string;   // Kept for backwards compatibility
+    timeslot?: string;         // Kept for backwards compatibility
     status: string;
     technician_name: string;
     technician_phone?: string;
@@ -92,8 +96,10 @@ export interface BookingForReview {
     };
     number_of_units: number;
     ac_brand?: string;
-    scheduled_date: string;
-    timeslot: string;
+    scheduled_start_at?: string;  // Dynamic scheduling
+    scheduled_end_at?: string;    // Dynamic scheduling
+    scheduled_date?: string;      // Kept for backwards compatibility
+    timeslot?: string;            // Kept for backwards compatibility
     total_amount: number;
     technician: {
         name: string;
@@ -140,7 +146,7 @@ export const customerApi = {
     },
 
     // Request booking cancellation
-    async requestCancellation(bookingNumber: string): Promise<{
+    async requestCancellation(bookingId: string | number): Promise<{
         success: boolean;
         message: string;
         booking?: {
@@ -153,7 +159,8 @@ export const customerApi = {
         current_status?: string;
         hours_remaining?: number;
     }> {
-        const response = await axios.post(`/api/customer/bookings/${bookingNumber}/cancel-request`);
+        const payload = (window as any).__cancelPayload || { reason_category: 'personal', reason_details: 'Requesting cancellation' };
+        const response = await axios.post(`/api/bookings/${bookingId}/request-cancellation`, payload);
         return response.data;
     },
 };

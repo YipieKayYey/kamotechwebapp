@@ -12,6 +12,7 @@ class Service extends Model
         'description',
         'base_price',
         'duration_minutes',
+        'prep_minutes',
         'is_active',
         'category',
     ];
@@ -19,6 +20,7 @@ class Service extends Model
     protected $casts = [
         'base_price' => 'decimal:2',
         'is_active' => 'boolean',
+        'prep_minutes' => 'integer',
     ];
 
     /**

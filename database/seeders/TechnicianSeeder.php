@@ -27,43 +27,43 @@ class TechnicianSeeder extends Seeder
                 'email' => 'pedro@kamotech.com',
                 'employee_id' => 'KMT-001',
                 'hire_date' => '2023-01-15',
-                'commission_rate' => 15.00,
+                'commission_rate' => 10.00,
                 'base_rating' => 4.8,
                 'max_daily_jobs' => 5,
                 'specialization' => 'Cleaning & Maintenance', // Pedro's specialty
             ],
             [
-                'email' => 'maria@kamotech.com',
+                'email' => 'jonathan@kamotech.com',
                 'employee_id' => 'KMT-002',
                 'hire_date' => '2023-03-20',
-                'commission_rate' => 18.00,
+                'commission_rate' => 10.00,
                 'base_rating' => 4.9,
                 'max_daily_jobs' => 6,
-                'specialization' => 'Installation & Setup', // Maria's specialty
+                'specialization' => 'Installation & Setup', // Jonathan's specialty
             ],
             [
                 'email' => 'jose@kamotech.com',
                 'employee_id' => 'KMT-003',
                 'hire_date' => '2023-06-10',
-                'commission_rate' => 12.00,
+                'commission_rate' => 10.00,
                 'base_rating' => 4.6,
                 'max_daily_jobs' => 4,
                 'specialization' => 'Basic Repair', // Jose's specialty
             ],
             [
-                'email' => 'ana@kamotech.com',
+                'email' => 'johncarl@kamotech.com',
                 'employee_id' => 'KMT-004',
                 'hire_date' => '2023-09-05',
-                'commission_rate' => 20.00,
+                'commission_rate' => 10.00,
                 'base_rating' => 4.95,
                 'max_daily_jobs' => 7,
-                'specialization' => 'All Services Expert', // Ana is good at everything
+                'specialization' => 'All Services Expert', // John Carl is good at everything
             ],
             [
                 'email' => 'carlos@kamotech.com',
                 'employee_id' => 'KMT-005',
                 'hire_date' => '2024-02-12',
-                'commission_rate' => 16.00,
+                'commission_rate' => 10.00,
                 'base_rating' => 4.7,
                 'max_daily_jobs' => 5,
                 'specialization' => 'Troubleshooting', // Carlos's specialty

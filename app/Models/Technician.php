@@ -40,10 +40,7 @@ class Technician extends Model
         return $this->hasMany(Booking::class);
     }
 
-    public function availability(): HasMany
-    {
-        return $this->hasMany(TechnicianAvailability::class);
-    }
+    // Availability removed - using simple is_available toggle instead
 
     public function reviews(): HasMany
     {

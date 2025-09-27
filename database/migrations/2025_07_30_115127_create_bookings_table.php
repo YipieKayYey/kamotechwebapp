@@ -25,13 +25,17 @@ return new class extends Migration
             $table->integer('number_of_units')->default(1); // Number of AC units to service
             $table->string('ac_brand')->nullable(); // AC brand (e.g., Samsung, LG, Carrier, "Unknown")
 
-            // Assignment & Scheduling
+            // Assignment & Scheduling (dynamic)
             $table->foreignId('technician_id')->nullable()->constrained()->onDelete('set null');
-            $table->date('scheduled_date'); // Start date
-            $table->date('scheduled_end_date')->nullable(); // End date for multi-day jobs
-            $table->foreignId('timeslot_id')->nullable()->constrained()->onDelete('set null');
-            $table->integer('estimated_duration_minutes')->nullable(); // Total job duration
-            $table->integer('estimated_days')->default(1); // Number of days required
+            // Dynamic scheduling replaces timeslots: precise start/end datetimes
+            $table->dateTime('scheduled_start_at');
+            $table->dateTime('scheduled_end_at');
+            // Optional operational tracking
+            $table->dateTime('actual_start_at')->nullable();
+            $table->dateTime('actual_end_at')->nullable();
+            // Deprecated: technician buffer removed; conflicts rely on planned windows only
+            // Estimate for analytics/UX
+            $table->integer('estimated_duration_minutes')->nullable();
 
             // Status & Payment
             $table->enum('status', ['pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'cancel_requested'])->default('pending');

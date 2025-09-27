@@ -6,8 +6,39 @@ import { HeroSlider } from '@/components/hero-slider';
 import { CheckCircle, Clock, Users, Wrench, Shield, Star, Phone } from 'lucide-react';
 import { route } from 'ziggy-js';
 
+interface WelcomePageProps extends SharedData {
+    promotions?: Array<{
+        id: number;
+        welcome_text: string | null;
+        title: string;
+        subtitle: string | null;
+        primary_button_text: string;
+        primary_button_link: string;
+        secondary_button_text: string | null;
+        secondary_button_link: string | null;
+        background_image: string | null;
+        discount: string | null;
+        promo_code: string | null;
+    }>;
+    latestReviews?: Array<{
+        id: number;
+        rating: number;
+        text: string;
+        author: string;
+        avatar: string;
+        service: string;
+        technician: string;
+    }>;
+}
+
 export default function Welcome() {
-    const { auth } = usePage<SharedData>().props;
+    const { auth, promotions, latestReviews } = usePage<WelcomePageProps>().props;
+    const getFirstName = (fullName?: string | null): string => {
+        if (!fullName) return '';
+        const trimmed = String(fullName).trim();
+        if (!trimmed) return '';
+        return trimmed.split(' ')[0];
+    };
 
     return (
         <>
@@ -20,7 +51,7 @@ export default function Welcome() {
                             <PublicNavigation />
             
             {/* Hero Slider Section */}
-            <HeroSlider />
+            <HeroSlider promotions={promotions} />
 
                 {/* Company Hero Section */}
                 <section className="company-hero-section">
@@ -32,7 +63,7 @@ export default function Welcome() {
                             
                             <div className="company-hero-card">
                                 <div className="company-tagline">
-                                    <span className="tagline-text">"Find the affordable, Find your satisfaction!"</span>
+                                    <span className="tagline-text">Find the affordable, Find your satisfaction!</span>
                                 </div>
                                 
                                 <div className="company-description">
@@ -267,65 +298,91 @@ export default function Welcome() {
                         </div>
                         
                         <div className="reviews-grid">
-                            <div className="review-card">
-                                <div className="review-stars">
-                                    <Star className="star filled" />
-                                    <Star className="star filled" />
-                                    <Star className="star filled" />
-                                    <Star className="star filled" />
-                                    <Star className="star filled" />
-                                </div>
-                                <p className="review-text">
-                                    "Ayos ang pagkakalagay lagay, saktong sakto na tumatagpos ang buong kwarto. Salamat po."
-                                </p>
-                                <div className="review-author">
-                                    <div className="author-avatar">F</div>
-                                    <div className="author-info">
-                                        <div className="author-name">Francis Karl</div>
-                                        <div className="author-service">Installation | Technician: Carlo Mendoza</div>
+                            {latestReviews && latestReviews.length > 0 ? (
+                                latestReviews.map((review) => (
+                                    <div key={review.id} className="review-card">
+                                        <div className="review-stars">
+                                            {[1, 2, 3, 4, 5].map((star) => (
+                                                <Star 
+                                                    key={star} 
+                                                    className={`star ${star <= review.rating ? 'filled' : ''}`} 
+                                                />
+                                            ))}
+                                        </div>
+                                        <p className="review-text">
+                                            "{review.text}"
+                                        </p>
+                                        <div className="review-author">
+                                            <div className="author-avatar">{review.avatar}</div>
+                                            <div className="author-info">
+                                                <div className="author-name">{getFirstName(review.author)}</div>
+                                                <div className="author-service">{review.service} | Technician: {getFirstName(review.technician)}</div>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
-                            
-                            <div className="review-card">
-                                <div className="review-stars">
-                                    <Star className="star filled" />
-                                    <Star className="star filled" />
-                                    <Star className="star filled" />
-                                    <Star className="star filled" />
-                                    <Star className="star filled" />
-                                </div>
-                                <p className="review-text">
-                                    "Ayos ang pagkakalagay-gawa. Malamig na ulit, ang sara na ng tulog neto. Salamat!"
-                                </p>
-                                <div className="review-author">
-                                    <div className="author-avatar">F</div>
-                                    <div className="author-info">
-                                        <div className="author-name">Francis Karl</div>
-                                        <div className="author-service">Repair | Technician: Mark Anthony Reyes</div>
+                                ))
+                            ) : (
+                                // Fallback to static reviews if no reviews in database
+                                <>
+                                    <div className="review-card">
+                                        <div className="review-stars">
+                                            <Star className="star filled" />
+                                            <Star className="star filled" />
+                                            <Star className="star filled" />
+                                            <Star className="star filled" />
+                                            <Star className="star filled" />
+                                        </div>
+                                        <p className="review-text">
+                                            "Excellent service! The technician was professional and fixed my AC quickly."
+                                        </p>
+                                        <div className="review-author">
+                                            <div className="author-avatar">C</div>
+                                            <div className="author-info">
+                                                <div className="author-name">Customer</div>
+                                                <div className="author-service">AC Repair | Technician: Kamotech Team</div>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
-                            
-                            <div className="review-card">
-                                <div className="review-stars">
-                                    <Star className="star filled" />
-                                    <Star className="star filled" />
-                                    <Star className="star filled" />
-                                    <Star className="star filled" />
-                                    <Star className="star filled" />
-                                </div>
-                                <p className="review-text">
-                                    "Ang linis ng pagkakalagay. Ang lamig ulit ng aircon namin pagkatapos nindan. Masayos kausap ang mga staff at mabilis din silang natapos. Ganda ng serbisyo!"
-                                </p>
-                                <div className="review-author">
-                                    <div className="author-avatar">S</div>
-                                    <div className="author-info">
-                                        <div className="author-name">Sample Customer</div>
-                                        <div className="author-service">Cleaning | Technician: Mark Anthony Reyes</div>
+                                    <div className="review-card">
+                                        <div className="review-stars">
+                                            <Star className="star filled" />
+                                            <Star className="star filled" />
+                                            <Star className="star filled" />
+                                            <Star className="star filled" />
+                                            <Star className="star filled" />
+                                        </div>
+                                        <p className="review-text">
+                                            "Very satisfied with the cleaning service. My AC is running like new again!"
+                                        </p>
+                                        <div className="review-author">
+                                            <div className="author-avatar">H</div>
+                                            <div className="author-info">
+                                                <div className="author-name">Happy Client</div>
+                                                <div className="author-service">AC Cleaning | Technician: Kamotech Team</div>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
+                                    <div className="review-card">
+                                        <div className="review-stars">
+                                            <Star className="star filled" />
+                                            <Star className="star filled" />
+                                            <Star className="star filled" />
+                                            <Star className="star filled" />
+                                            <Star className="star filled" />
+                                        </div>
+                                        <p className="review-text">
+                                            "Professional installation service. The team was knowledgeable and efficient."
+                                        </p>
+                                        <div className="review-author">
+                                            <div className="author-avatar">S</div>
+                                            <div className="author-info">
+                                                <div className="author-name">Satisfied Customer</div>
+                                                <div className="author-service">AC Installation | Technician: Kamotech Team</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                         
                         <div className="reviews-action">

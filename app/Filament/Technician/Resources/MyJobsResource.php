@@ -24,12 +24,19 @@ class MyJobsResource extends Resource
 
     protected static ?int $navigationSort = 1;
 
+    protected static ?array $searchable = [
+        'booking_number',
+        'customer_address',
+        'customer_mobile',
+        'special_instructions',
+    ];
+
     public static function getNavigationBadge(): ?string
     {
         $user = auth()->user();
         $technicianId = $user->technician?->id;
-        
-        if (!$technicianId) {
+
+        if (! $technicianId) {
             return null;
         }
 
@@ -49,15 +56,16 @@ class MyJobsResource extends Resource
     {
         $user = auth()->user();
         $technicianId = $user->technician?->id;
-        
+
         // If no technician record exists, return empty query
-        if (!$technicianId) {
+        if (! $technicianId) {
             return parent::getEloquentQuery()->whereRaw('1 = 0'); // Return no results
         }
-        
+
         return parent::getEloquentQuery()
             ->where('technician_id', $technicianId)
-            ->with(['customer', 'service', 'airconType', 'timeslot']);
+            ->whereIn('status', ['pending', 'confirmed', 'in_progress', 'cancel_requested'])
+            ->with(['customer', 'service', 'airconType']);
     }
 
     public static function form(Form $form): Form
@@ -102,24 +110,24 @@ class MyJobsResource extends Resource
 
                 Forms\Components\Section::make('Schedule & Location')
                     ->schema([
-                        Forms\Components\TextInput::make('start_date')
-                            ->label('Scheduled Date')
+                        Forms\Components\TextInput::make('scheduled_start')
+                            ->label('Scheduled Start')
                             ->disabled()
                             ->dehydrated(false)
-                            ->formatStateUsing(fn ($record) => $record->scheduled_date ? $record->scheduled_date->format('M j, Y') : null),
+                            ->formatStateUsing(fn ($record) => $record->scheduled_start_at ? $record->scheduled_start_at->format('M j, Y g:i A') : null),
 
-                        Forms\Components\TextInput::make('time_slot')
-                            ->label('Time Slot')
+                        Forms\Components\TextInput::make('scheduled_end')
+                            ->label('Scheduled End')
                             ->disabled()
                             ->dehydrated(false)
-                            ->formatStateUsing(fn ($record) => $record->timeslot?->display_time),
+                            ->formatStateUsing(fn ($record) => $record->scheduled_end_at ? $record->scheduled_end_at->format('M j, Y g:i A') : null),
 
-                        Forms\Components\TextInput::make('end_date')
-                            ->label('Estimated End Date')
+                        Forms\Components\TextInput::make('duration')
+                            ->label('Duration')
                             ->disabled()
                             ->dehydrated(false)
-                            ->formatStateUsing(fn ($record) => $record->scheduled_end_date ? $record->scheduled_end_date->format('M j, Y') : null)
-                            ->visible(fn ($record) => $record->scheduled_end_date),
+                            ->formatStateUsing(fn ($record) => $record->estimated_duration_minutes ? ($record->estimated_duration_minutes / 60).' hours' : null)
+                            ->visible(fn ($record) => $record->estimated_duration_minutes),
 
                         Forms\Components\Textarea::make('customer_address')
                             ->label('Service Address')
@@ -163,7 +171,7 @@ class MyJobsResource extends Resource
                             ->disabled()
                             ->rows(2)
                             ->columnSpanFull()
-                            ->visible(fn ($record) => !empty($record->admin_notes)),
+                            ->visible(fn ($record) => ! empty($record->admin_notes)),
                     ]),
 
                 Forms\Components\Section::make('Job Status')
@@ -192,6 +200,11 @@ class MyJobsResource extends Resource
     {
         return $table
             ->defaultSort('created_at', 'desc')
+            ->searchable()
+            ->searchPlaceholder('Search by booking #, customer, service, or address...')
+            ->modifyQueryUsing(function (Builder $query) {
+                return $query->with(['customer', 'service', 'airconType']);
+            })
             ->columns([
                 Tables\Columns\TextColumn::make('booking_number')
                     ->label('Booking #')
@@ -201,37 +214,75 @@ class MyJobsResource extends Resource
 
                 Tables\Columns\TextColumn::make('display_name')
                     ->label('Customer')
-                    ->searchable(['customer_name', 'customer.name'])
-                    ->sortable(),
+                    ->getStateUsing(fn ($record) => $record->customer_name ?? $record->customer?->name ?? 'Guest')
+                    ->sortable(false)
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->where(function ($query) use ($search) {
+                            $query->whereHas('customer', function ($q) use ($search) {
+                                $q->where('name', 'like', "%{$search}%");
+                            });
+                        });
+                    }),
 
                 Tables\Columns\TextColumn::make('service.name')
                     ->label('Service')
-                    ->searchable()
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->whereHas('service', function ($q) use ($search) {
+                            $q->where('name', 'like', "%{$search}%");
+                        });
+                    })
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('scheduled_date')
-                    ->label('Date')
-                    ->date('M j, Y')
+                Tables\Columns\TextColumn::make('scheduled_start_at')
+                    ->label('Start Date/Time')
+                    ->dateTime('M j, Y g:i A')
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('timeslot.display_time')
-                    ->label('Time')
+                Tables\Columns\TextColumn::make('scheduled_end_at')
+                    ->label('Est. End Date/Time')
+                    ->dateTime('M j, Y g:i A')
                     ->sortable(),
 
                 Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
+                    ->formatStateUsing(function ($state, $record) {
+                        if ($state === 'confirmed' &&
+                            $record->scheduled_start_at &&
+                            now()->greaterThanOrEqualTo($record->scheduled_start_at->startOfDay())) {
+                            return 'Ready to Start';
+                        }
+
+                        return ucfirst(str_replace('_', ' ', $state));
+                    })
                     ->colors([
-                        'warning' => 'pending',
-                        'info' => 'confirmed', 
-                        'primary' => 'in_progress',
-                        'success' => 'completed',
+                        'warning' => fn ($state, $record) => $state === 'pending' ||
+                            ($state === 'confirmed' &&
+                             $record->scheduled_start_at &&
+                             now()->lessThan($record->scheduled_start_at->startOfDay())),
+                        'success' => fn ($state, $record) => $state === 'completed' ||
+                            ($state === 'confirmed' &&
+                             $record->scheduled_start_at &&
+                             now()->greaterThanOrEqualTo($record->scheduled_start_at->startOfDay())),
+                        'primary' => fn ($state) => $state === 'in_progress',
+                        'danger' => fn ($state) => $state === 'cancelled',
+                        'gray' => fn ($state) => $state === 'cancel_requested',
                     ])
+                    ->icon(fn ($state, $record) => match (true) {
+                        $state === 'confirmed' &&
+                        $record->scheduled_start_at &&
+                        now()->greaterThanOrEqualTo($record->scheduled_start_at->startOfDay()) => 'heroicon-m-play-circle',
+                        $state === 'in_progress' => 'heroicon-m-arrow-path',
+                        $state === 'completed' => 'heroicon-m-check-circle',
+                        $state === 'cancelled' => 'heroicon-m-x-circle',
+                        default => null,
+                    })
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('customer_address')
                     ->label('Address')
                     ->limit(30)
-                    ->tooltip(fn($record) => $record->customer_address),
+                    ->tooltip(fn ($record) => $record->customer_address)
+                    ->searchable(),
 
                 Tables\Columns\TextColumn::make('contact_number')
                     ->label('Contact')
@@ -244,46 +295,70 @@ class MyJobsResource extends Resource
                     ->options([
                         'pending' => 'Pending',
                         'confirmed' => 'Confirmed',
-                        'in_progress' => 'In Progress', 
+                        'in_progress' => 'In Progress',
                         'completed' => 'Completed',
                     ]),
+
+                Tables\Filters\SelectFilter::make('service')
+                    ->label('Service')
+                    ->relationship('service', 'name')
+                    ->preload()
+                    ->searchable(),
             ])
             ->actions([
                 Tables\Actions\Action::make('start_job')
                     ->label('Start Job')
                     ->icon('heroicon-m-play')
                     ->color('success')
-                    ->visible(fn(Booking $record): bool => $record->status === 'confirmed')
+                    ->visible(fn (Booking $record): bool => $record->status === 'confirmed' &&
+                        $record->scheduled_start_at &&
+                        now()->greaterThanOrEqualTo($record->scheduled_start_at->startOfDay())
+                    )
+                    ->tooltip(function (Booking $record): ?string {
+                        if ($record->status !== 'confirmed') {
+                            return null;
+                        }
+                        if ($record->scheduled_start_at && now()->lessThan($record->scheduled_start_at->startOfDay())) {
+                            return 'Job can be started on '.$record->scheduled_start_at->format('M j, Y');
+                        }
+
+                        return 'Click to start this job';
+                    })
                     ->requiresConfirmation()
                     ->modalHeading('Start Job')
-                    ->modalDescription('Mark this job as in progress?')
+                    ->modalDescription(fn (Booking $record) => "Start job {$record->booking_number} for {$record->service->name}?")
+                    ->modalSubmitActionLabel('Yes, Start Job')
                     ->action(function (Booking $record): void {
-                        $record->update(['status' => 'in_progress']);
-                        
+                        $record->update([
+                            'status' => 'in_progress',
+                            'started_at' => now(),
+                        ]);
+
                         \Filament\Notifications\Notification::make()
-                            ->title('Job Started')
-                            ->body("Job {$record->booking_number} marked as in progress.")
+                            ->title('Job Started Successfully')
+                            ->body("Job {$record->booking_number} is now in progress.")
                             ->success()
                             ->send();
                     }),
 
                 Tables\Actions\Action::make('complete_job')
-                    ->label('Complete')
+                    ->label('Complete Job')
                     ->icon('heroicon-m-check-badge')
                     ->color('success')
-                    ->visible(fn(Booking $record): bool => $record->status === 'in_progress')
+                    ->visible(fn (Booking $record): bool => $record->status === 'in_progress')
                     ->requiresConfirmation()
                     ->modalHeading('Complete Job')
-                    ->modalDescription('Mark this job as completed?')
+                    ->modalDescription(fn (Booking $record) => "Mark job {$record->booking_number} as completed?")
+                    ->modalSubmitActionLabel('Yes, Complete Job')
                     ->action(function (Booking $record): void {
                         $record->update([
                             'status' => 'completed',
                             'completed_at' => now(),
                         ]);
-                        
+
                         \Filament\Notifications\Notification::make()
-                            ->title('Job Completed')
-                            ->body("Job {$record->booking_number} marked as completed.")
+                            ->title('Job Completed Successfully')
+                            ->body("Job {$record->booking_number} has been marked as completed.")
                             ->success()
                             ->send();
                     }),

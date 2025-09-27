@@ -3,23 +3,23 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ServiceResource\Pages;
-use App\Filament\Resources\ServiceResource\RelationManagers;
 use App\Models\Service;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class ServiceResource extends Resource
 {
     protected static ?string $model = Service::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-cog-6-tooth';
+
     protected static ?string $navigationGroup = 'Service Management';
+
     protected static ?string $navigationLabel = 'Services';
+
     protected static ?int $navigationSort = 1;
 
     public static function form(Form $form): Form
@@ -38,6 +38,11 @@ class ServiceResource extends Resource
                     ->required()
                     ->numeric()
                     ->default(60),
+                Forms\Components\TextInput::make('prep_minutes')
+                    ->label('Prep / Travel Minutes')
+                    ->numeric()
+                    ->default(60)
+                    ->helperText('Added to work duration for planning; used to compute end time'),
                 Forms\Components\Toggle::make('is_active')
                     ->required(),
                 Forms\Components\TextInput::make('category')
@@ -57,6 +62,10 @@ class ServiceResource extends Resource
                     ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('duration_minutes')
+                    ->numeric()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('prep_minutes')
+                    ->label('Prep (min)')
                     ->numeric()
                     ->sortable(),
                 Tables\Columns\IconColumn::make('is_active')
@@ -80,7 +89,7 @@ class ServiceResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    // Delete actions disabled as per panelist requirement
                 ]),
             ]);
     }

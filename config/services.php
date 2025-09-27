@@ -37,4 +37,17 @@ return [
 
     // Removed address autocomplete configuration
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI', '/auth/google/callback'),
+    ],
+
+    'semaphore' => [
+        'api_key' => env('SEMAPHORE_API_KEY'),
+        'api_url' => env('SEMAPHORE_API_URL', 'https://api.semaphore.co/api/v4/messages'),
+        // Remove sender_name to avoid validation errors
+        // 'sender_name' => env('SEMAPHORE_SENDER_NAME'),
+    ],
+
 ];

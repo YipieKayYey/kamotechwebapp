@@ -16,9 +16,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property int $number_of_units
  * @property string|null $ac_brand
  * @property int|null $technician_id
- * @property \Illuminate\Support\Carbon $scheduled_date
- * @property \Illuminate\Support\Carbon|null $scheduled_end_date
- * @property int $timeslot_id
+ * @property \Illuminate\Support\Carbon $scheduled_start_at
+ * @property \Illuminate\Support\Carbon $scheduled_end_at
  * @property int|null $estimated_duration_minutes
  * @property int|null $estimated_days
  * @property string $status
@@ -49,7 +48,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property-read Service $service
  * @property-read AirconType $airconType
  * @property-read Technician|null $technician
- * @property-read Timeslot $timeslot
  * @property-read User|null $createdBy
  * @property-read User|null $confirmedBy
  * @property-read User|null $cancellationProcessedBy
@@ -58,21 +56,27 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property-read string $service_location
  * @property-read string $full_address
  * @property-read string $display_name
+ * @property int|null $promotion_id
+ * @property float $discount_amount
+ * @property float|null $original_amount
+ * @property-read Promotion|null $promotion
  */
 class Booking extends Model
 {
     protected $fillable = [
         'booking_number',
         'customer_id',
+        'guest_customer_id',
         'customer_name',
         'service_id',
         'aircon_type_id',
         'number_of_units',
         'ac_brand',
         'technician_id',
-        'scheduled_date',
-        'scheduled_end_date',
-        'timeslot_id',
+        'scheduled_start_at',
+        'scheduled_end_at',
+        'actual_start_at',
+        'actual_end_at',
         'estimated_duration_minutes',
         'estimated_days',
         'status',
@@ -97,6 +101,9 @@ class Booking extends Model
         'confirmed_at',
         'confirmed_by',
         'completed_at',
+        'promotion_id',
+        'discount_amount',
+        'original_amount',
     ];
 
     /**
@@ -107,9 +114,13 @@ class Booking extends Model
     protected function casts(): array
     {
         return [
-            'scheduled_date' => 'date',
-            'scheduled_end_date' => 'date',
+            'scheduled_start_at' => 'datetime',
+            'scheduled_end_at' => 'datetime',
+            'actual_start_at' => 'datetime',
+            'actual_end_at' => 'datetime',
             'total_amount' => 'decimal:2',
+            'discount_amount' => 'decimal:2',
+            'original_amount' => 'decimal:2',
             'use_custom_address' => 'boolean',
             'cancellation_requested_at' => 'datetime',
             'cancellation_processed_at' => 'datetime',
@@ -141,10 +152,7 @@ class Booking extends Model
         return $this->belongsTo(Technician::class);
     }
 
-    public function timeslot(): BelongsTo
-    {
-        return $this->belongsTo(Timeslot::class);
-    }
+    // Legacy timeslot relationship removed (dynamic scheduling)
 
     public function createdBy(): BelongsTo
     {
@@ -171,18 +179,23 @@ class Booking extends Model
         return $this->hasOne(Earning::class);
     }
 
+    public function guestCustomer(): BelongsTo
+    {
+        return $this->belongsTo(GuestCustomer::class);
+    }
+
+    public function promotion(): BelongsTo
+    {
+        return $this->belongsTo(Promotion::class);
+    }
+
     /**
      * Address Helper Methods
      */
     public function getServiceLocationAttribute(): string
     {
-        // If using custom address or no customer, use booking address
-        if ($this->use_custom_address || ! $this->customer) {
-            return $this->getBookingAddress();
-        }
-
-        // Use customer's address
-        return $this->customer->service_location;
+        // Always use booking address since users don't have saved addresses
+        return $this->getBookingAddress();
     }
 
     public function getBookingAddress(): string
@@ -244,12 +257,12 @@ class Booking extends Model
 
     public function scopeToday($query)
     {
-        return $query->whereDate('scheduled_date', today());
+        return $query->whereDate('scheduled_start_at', today());
     }
 
     public function scopeUpcoming($query)
     {
-        return $query->where('scheduled_date', '>=', today());
+        return $query->whereDate('scheduled_start_at', '>=', today());
     }
 
     public function scopePaid($query)
@@ -266,10 +279,10 @@ class Booking extends Model
     {
         return $query->where(function ($q) {
             $q->where('status', 'cancel_requested')
-              ->orWhere(function ($subQ) {
-                  $subQ->where('status', 'pending')
-                       ->where('scheduled_date', '<=', now()->addDay());
-              });
+                ->orWhere(function ($subQ) {
+                    $subQ->where('status', 'pending')
+                        ->where('scheduled_start_at', '<=', now()->addDay());
+                });
         });
     }
 
@@ -290,13 +303,17 @@ class Booking extends Model
 
     public function getDisplayNameAttribute()
     {
-        // If customer_name is provided (hybrid booking), use it
-        if ($this->customer_name) {
-            return $this->customer_name;
+        // Priority: registered customer > guest customer > customer_name field
+        if ($this->customer) {
+            return $this->customer->name;
         }
 
-        // Otherwise use the related customer's name
-        return $this->customer ? $this->customer->name : 'Guest Customer';
+        if ($this->guestCustomer) {
+            return $this->guestCustomer->full_name;
+        }
+
+        // Fallback to customer_name field for legacy bookings
+        return $this->customer_name ?? 'Unknown Customer';
     }
 
     public function getIsGuestBookingAttribute()
@@ -334,30 +351,30 @@ class Booking extends Model
     public function canCustomerRequestCancellation(): bool
     {
         // Must be more than 1 day before scheduled date
-        if ($this->scheduled_date <= now()->addDay()) {
+        if ($this->scheduled_start_at <= now()->addDay()) {
             return false;
         }
-        
+
         // Can't request if already completed, cancelled, or request pending
         if (in_array($this->status, ['completed', 'cancelled', 'cancel_requested'])) {
             return false;
         }
-        
+
         return true;
     }
 
     public function getCancellationDeadline(): \Carbon\Carbon
     {
-        return $this->scheduled_date->subDay();
+        return $this->scheduled_start_at->copy()->subDay();
     }
 
     public function getTimeUntilCancellationDeadline(): string
     {
-        if (!$this->canCustomerRequestCancellation()) {
+        if (! $this->canCustomerRequestCancellation()) {
             return 'Deadline passed';
         }
-        
-        return now()->diffForHumans($this->getCancellationDeadline(), true) . ' remaining';
+
+        return now()->diffForHumans($this->getCancellationDeadline(), true).' remaining';
     }
 
     public function hasPendingCancellationRequest(): bool
@@ -385,15 +402,15 @@ class Booking extends Model
         if ($this->technician) {
             $commissionRate = $this->technician->commission_rate / 100; // Convert percentage to decimal
             $commissionAmount = $this->total_amount * $commissionRate;
-            
+
             // Add occasional bonuses for high-rated technicians
             $bonusAmount = 0;
             if ($this->technician->rating_average >= 4.8 && rand(1, 4) == 1) {
                 $bonusAmount = round($commissionAmount * 0.1, 2); // 10% bonus
             }
-            
+
             $totalEarning = $commissionAmount + $bonusAmount;
-            
+
             // Create earning record based on current booking status
             $this->earning()->create([
                 'technician_id' => $this->technician_id,
@@ -420,7 +437,7 @@ class Booking extends Model
 
     private function getEarningPaymentStatus(): string
     {
-        return match($this->status) {
+        return match ($this->status) {
             'completed' => 'paid',
             'cancelled' => 'unpaid',
             'pending', 'confirmed', 'in_progress' => 'pending',
@@ -433,6 +450,7 @@ class Booking extends Model
         if ($this->status === 'completed') {
             return $this->completed_at?->format('Y-m-d H:i:s') ?? now()->format('Y-m-d H:i:s');
         }
+
         return null;
     }
 
@@ -479,14 +497,7 @@ class Booking extends Model
             }
 
             // Auto-calculate multi-day booking end date
-            if ($booking->service_id && $booking->number_of_units && $booking->scheduled_date) {
-                $estimatedDays = $booking->calculateEstimatedDays();
-                if ($estimatedDays > 1) {
-                    $endDate = \Carbon\Carbon::parse($booking->scheduled_date)->addDays($estimatedDays - 1);
-                    $booking->scheduled_end_date = $endDate->format('Y-m-d');
-                    $booking->estimated_days = $estimatedDays;
-                }
-            }
+            // Dynamic scheduling: scheduled_start_at / scheduled_end_at are set by creator
         });
 
         static::created(function ($booking) {
@@ -502,8 +513,8 @@ class Booking extends Model
                 $booking->handleAddressGeneration();
             }
 
-            // Recalculate total amount if service or aircon type changes
-            if ($booking->isDirty(['service_id', 'aircon_type_id', 'number_of_units'])) {
+            // Recalculate total amount if service, aircon type, or promotion changes
+            if ($booking->isDirty(['service_id', 'aircon_type_id', 'number_of_units', 'promotion_id'])) {
                 $booking->total_amount = $booking->calculateTotalAmount();
             }
 
@@ -520,10 +531,10 @@ class Booking extends Model
 
         static::updated(function ($booking) {
             // Create earning if technician was just assigned
-            if ($booking->wasChanged('technician_id') && $booking->technician_id && !$booking->earning) {
+            if ($booking->wasChanged('technician_id') && $booking->technician_id && ! $booking->earning) {
                 $booking->createInitialEarning();
             }
-            
+
             // Handle commission status updates
             if ($booking->wasChanged('status') && $booking->earning) {
                 $booking->updateEarningStatus();
@@ -536,23 +547,9 @@ class Booking extends Model
      */
     private function handleAddressGeneration(): void
     {
-        // If not using custom address and we have a customer, use their address
-        if (! $this->use_custom_address && $this->customer_id && $this->customer) {
-            // Copy structured address from customer
-            if ($this->customer->hasStructuredAddress()) {
-                $this->province = $this->customer->province;
-                $this->city_municipality = $this->customer->city_municipality;
-                $this->barangay = $this->customer->barangay;
-                $this->house_no_street = $this->customer->house_no_street;
-            }
-
-            // Set the complete address
-            $this->customer_address = $this->customer->service_location;
-        } else {
-            // Using custom address - generate from components if available
-            if ($this->hasBookingStructuredAddress()) {
-                $this->customer_address = $this->getBookingAddress();
-            }
+        // Always generate address from booking's own components since users don't have saved addresses
+        if ($this->hasBookingStructuredAddress()) {
+            $this->customer_address = $this->getBookingAddress();
         }
     }
 
@@ -570,7 +567,43 @@ class Booking extends Model
         $numberOfUnits = $this->number_of_units ?? 0;
 
         // Simple pricing: base price × number of units
-        $totalPrice = $basePrice * $numberOfUnits;
+        $originalPrice = $basePrice * $numberOfUnits;
+
+        // Apply promotion if exists
+        if ($this->promotion_id && $this->promotion) {
+            $promotion = $this->promotion;
+
+            // Ensure promotion is still valid
+            if ($promotion->isValid()) {
+                $this->original_amount = $originalPrice;
+
+                switch ($promotion->discount_type) {
+                    case 'percentage':
+                        $this->discount_amount = $originalPrice * ($promotion->discount_value / 100);
+                        break;
+                    case 'fixed':
+                        $this->discount_amount = min($promotion->discount_value, $originalPrice);
+                        break;
+                    case 'free_service':
+                        $this->discount_amount = $originalPrice;
+                        break;
+                    default:
+                        $this->discount_amount = 0;
+                }
+
+                $totalPrice = max(0, $originalPrice - $this->discount_amount);
+            } else {
+                // Promotion no longer valid, clear it
+                $this->promotion_id = null;
+                $this->discount_amount = 0;
+                $this->original_amount = null;
+                $totalPrice = $originalPrice;
+            }
+        } else {
+            $this->discount_amount = 0;
+            $this->original_amount = null;
+            $totalPrice = $originalPrice;
+        }
 
         return round($totalPrice, 2);
     }
@@ -580,7 +613,7 @@ class Booking extends Model
      */
     public function calculateEstimatedDays(): int
     {
-        if (!$this->service || !$this->number_of_units) {
+        if (! $this->service || ! $this->number_of_units) {
             return 1;
         }
 
@@ -609,7 +642,8 @@ class Booking extends Model
      */
     public function isMultiDay(): bool
     {
-        return $this->scheduled_end_date && 
-               $this->scheduled_end_date !== $this->scheduled_date;
+        return $this->scheduled_end_at &&
+               $this->scheduled_start_at &&
+               $this->scheduled_end_at->toDateString() !== $this->scheduled_start_at->toDateString();
     }
 }

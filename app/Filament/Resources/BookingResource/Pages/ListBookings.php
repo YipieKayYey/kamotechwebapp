@@ -12,6 +12,10 @@ class ListBookings extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        return [];
+        return [
+            Actions\CreateAction::make()
+                ->label('Create New Booking')
+                ->icon('heroicon-m-plus'),
+        ];
     }
 }

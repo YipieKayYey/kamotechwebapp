@@ -1,7 +1,8 @@
-import { Head, useForm, Link } from '@inertiajs/react';
-import { FormEventHandler } from 'react';
+import { Head, useForm, Link, usePage } from '@inertiajs/react';
+import { FormEventHandler, useState, useEffect, useRef } from 'react';
 import { PublicNavigation } from '@/components/public-navigation';
 import { PublicFooter } from '@/components/public-footer';
+import { Recaptcha } from '@/components/recaptcha';
 
 type LoginForm = {
     email: string;
@@ -12,19 +13,44 @@ type LoginForm = {
 interface LoginProps {
     status?: string;
     canResetPassword: boolean;
+    recaptcha_site_key?: string;
 }
 
-export default function Login({ status, canResetPassword }: LoginProps) {
+export default function Login({ status, canResetPassword, recaptcha_site_key }: LoginProps) {
     const { data, setData, post, processing, errors, reset } = useForm<Required<LoginForm>>({
         email: '',
         password: '',
         remember: false,
     });
+    
+    const [showStaffLinks, setShowStaffLinks] = useState(false);
+    const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
+    
+    // Check if the error message indicates a staff user tried to login
+    useEffect(() => {
+        if (errors.email) {
+            const isStaffError = errors.email.includes('admin login page') || 
+                               errors.email.includes('technician login page');
+            setShowStaffLinks(isStaffError);
+        }
+    }, [errors.email]);
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
+        
+        // Include reCAPTCHA token if available
+        const formData = {
+            ...data,
+            ...(recaptchaToken && { 'g-recaptcha-response': recaptchaToken })
+        };
+        
         post(route('login'), {
-            onFinish: () => reset('password'),
+            data: formData,
+            onFinish: () => {
+                reset('password');
+                setRecaptchaToken(null);
+            },
         });
     };
 
@@ -62,7 +88,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                 </div>
 
                                 {status && (
-                                    <div className="mb-4 text-center text-sm font-medium text-green-600">
+                                    <div className={`mb-4 text-center text-sm font-medium ${status.includes('Unable') ? 'text-red-600' : 'text-green-600'}`}>
                                         {status}
                                     </div>
                                 )}
@@ -94,17 +120,36 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                                 </Link>
                                             )}
                                         </div>
-                                        <input
-                                            id="password"
-                                            type="password"
-                                            required
-                                            tabIndex={2}
-                                            autoComplete="current-password"
-                                            value={data.password}
-                                            onChange={(e) => setData('password', e.target.value)}
-                                            placeholder="Enter your password"
-                                            className={`form-input ${errors.password ? 'error' : ''}`}
-                                        />
+                                        <div className="password-input-container">
+                                            <input
+                                                id="password"
+                                                type={showPassword ? "text" : "password"}
+                                                required
+                                                tabIndex={2}
+                                                autoComplete="current-password"
+                                                value={data.password}
+                                                onChange={(e) => setData('password', e.target.value)}
+                                                placeholder="Enter your password"
+                                                className={`form-input password-input-with-toggle ${errors.password ? 'error' : ''}`}
+                                            />
+                                            <button
+                                                type="button"
+                                                className="password-toggle-button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                tabIndex={-1}
+                                            >
+                                                {showPassword ? (
+                                                    <svg className="password-toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                                                    </svg>
+                                                ) : (
+                                                    <svg className="password-toggle-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                    </svg>
+                                                )}
+                                            </button>
+                                        </div>
                                         {errors.password && <div className="input-error">{errors.password}</div>}
                                     </div>
 
@@ -119,6 +164,24 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                         />
                                         <label htmlFor="remember" className="remember-label">Remember me</label>
                                     </div>
+
+                                    {/* reCAPTCHA - Show only if site key is provided */}
+                                    {recaptcha_site_key && (
+                                        <div className="form-group" style={{ marginTop: '1rem' }}>
+                                            <Recaptcha
+                                                siteKey={recaptcha_site_key}
+                                                onChange={setRecaptchaToken}
+                                                onError={() => {
+                                                    console.error('reCAPTCHA error');
+                                                }}
+                                            />
+                                            {errors.recaptcha && (
+                                                <div className="input-error" style={{ marginTop: '0.5rem' }}>
+                                                    {errors.recaptcha}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
 
                                     <button type="submit" className="auth-button" tabIndex={4} disabled={processing}>
                                         {processing && <div className="loading-spinner"></div>}
@@ -143,6 +206,20 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                 <div className="auth-link">
                                     Don't have an account? <Link href={route('register')} tabIndex={6}>Sign up</Link>
                                 </div>
+                                
+                                {showStaffLinks && (
+                                    <div className="auth-role-links">
+                                        <p className="text-sm text-gray-600 mt-4">Staff Login:</p>
+                                        <div className="flex gap-4 mt-2">
+                                            <a href="/admin/login" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                                                Admin Login →
+                                            </a>
+                                            <a href="/technician/login" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                                                Technician Login →
+                                            </a>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

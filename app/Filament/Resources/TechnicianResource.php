@@ -18,6 +18,8 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Group;
+use Filament\Forms\Components\Actions;
+use Filament\Forms\Components\Actions\Action;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\Log;
@@ -53,58 +55,29 @@ class TechnicianResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('User Account Information')
-                    ->description('Create or select a user account for this technician')
+                    ->description('Select a user account for this technician')
                     ->schema([
                         Forms\Components\Select::make('user_id')
-                            ->label('Existing User (Optional)')
+                            ->label('Select Technician User')
                             ->relationship('user', 'name', function ($query) {
-                                return $query->where('role', 'technician')->orWhere('role', 'admin');
+                                return $query->where('role', 'technician');
                             })
                             ->searchable()
                             ->preload()
-                            ->placeholder('Select existing user OR fill out new user details below')
-                            ->helperText('Leave empty to create a new user account')
-                            ->reactive()
+                            ->placeholder('Choose a technician user')
+                            ->helperText('Select a user with technician role')
+                            ->required()
                             ->columnSpanFull(),
                             
-                        // New User Creation Fields (shown when no existing user selected)
-                        Forms\Components\Group::make([
-                            Forms\Components\TextInput::make('user.name')
-                                ->label('Full Name')
-                                ->required(fn (callable $get) => !$get('user_id'))
-                                ->maxLength(255)
-                                ->placeholder('Juan Dela Cruz')
-                                ->hidden(fn (callable $get) => filled($get('user_id'))),
-                            Forms\Components\TextInput::make('user.email')
-                                ->label('Email')
-                                ->email()
-                                ->required(fn (callable $get) => !$get('user_id'))
-                                ->maxLength(255)
-                                ->placeholder('juan@example.com')
-                                ->hidden(fn (callable $get) => filled($get('user_id'))),
-                            Forms\Components\TextInput::make('user.password')
-                                ->label('Password')
-                                ->password()
-                                ->required(fn (callable $get) => !$get('user_id'))
-                                ->maxLength(255)
-                                ->placeholder('Create a secure password')
-                                ->hidden(fn (callable $get) => filled($get('user_id'))),
-                            Forms\Components\TextInput::make('user.phone')
-                                ->label('Phone')
-                                ->tel()
-                                ->maxLength(255)
-                                ->placeholder('09123456789')
-                                ->hidden(fn (callable $get) => filled($get('user_id'))),
-                        ])->columns(2),
-                        
-                        Forms\Components\Group::make([
-                            Forms\Components\Textarea::make('user.address')
-                                ->label('Address')
-                                ->rows(2)
-                                ->placeholder('Complete address (Street, Barangay, City, Province)')
-                                ->columnSpanFull()
-                                ->hidden(fn (callable $get) => filled($get('user_id'))),
-                        ]),
+                        Forms\Components\Actions::make([
+                            Forms\Components\Actions\Action::make('create_user')
+                                ->label('Create New Technician User')
+                                ->icon('heroicon-o-plus')
+                                ->url(fn() => route('filament.admin.resources.users.create'))
+                                ->color('primary'),
+                        ])
+                            ->fullWidth()
+                            ->alignment('start'),
                     ]),
                     
                 Forms\Components\Section::make('Employment Details')
@@ -113,8 +86,16 @@ class TechnicianResource extends Resource
                             ->label('Employee ID')
                             ->required()
                             ->maxLength(255)
-                            ->placeholder('TECH-001')
-                            ->helperText('Unique employee identifier'),
+                            ->default(function () {
+                                // Auto-generate employee ID following KMT-XXX pattern
+                                $lastTechnician = \App\Models\Technician::orderBy('id', 'desc')->first();
+                                $nextNumber = $lastTechnician ? 
+                                    ((int) str_replace('KMT-', '', $lastTechnician->employee_id)) + 1 : 1;
+                                return 'KMT-' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
+                            })
+                            ->disabled()
+                            ->dehydrated()
+                            ->helperText('Auto-generated unique employee identifier (KMT-XXX)'),
                         Forms\Components\DatePicker::make('hire_date')
                             ->label('Hire Date')
                             ->required()
@@ -128,11 +109,11 @@ class TechnicianResource extends Resource
                             ->label('Initial Rating')
                             ->required()
                             ->numeric()
-                            ->minValue(1)
+                            ->minValue(0)
                             ->maxValue(5)
                             ->step(0.1)
-                            ->default(5.00)
-                            ->helperText('Starting rating (1-5 stars)'),
+                            ->default(0.00)
+                            ->helperText('Starting rating (0-5 stars, will increase with reviews)'),
                         Forms\Components\Toggle::make('is_available')
                             ->label('Currently Available')
                             ->default(true)
@@ -164,12 +145,12 @@ class TechnicianResource extends Resource
                                 ->step(0.01)
                                 ->minValue(5.00)
                                 ->maxValue(30.00)
-                                ->default(15.00)
+                                ->default(10.00)
                                 ->helperText('Commission percentage on completed bookings (5% - 30%)')
                                 ->live()
                                 ->afterStateUpdated(function ($state, callable $set) {
                                     // Update commission examples in real-time
-                                    $rate = $state ?? 15;
+                                    $rate = $state ?? 10;
                                     $commission1 = 1000 * ($rate / 100);
                                     $commission2 = 2500 * ($rate / 100);
                                     $set('commission_examples', "₱1000 → ₱" . number_format($commission1, 0) . " | ₱2500 → ₱" . number_format($commission2, 0));
@@ -180,7 +161,7 @@ class TechnicianResource extends Resource
                                 ->disabled()
                                 ->dehydrated(false)
                                 ->default(function (callable $get): string {
-                                    $rate = $get('commission_rate') ?? 15;
+                                    $rate = $get('commission_rate') ?? 10;
                                     $commission1 = 1000 * ($rate / 100);
                                     $commission2 = 2500 * ($rate / 100);
                                     return "₱1000 → ₱" . number_format($commission1, 0) . " | ₱2500 → ₱" . number_format($commission2, 0);

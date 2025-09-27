@@ -19,7 +19,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BooleanColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Actions\EditAction;
-use Filament\Tables\Actions\DeleteAction;
+// DeleteAction removed as per panelist requirement
 use Filament\Tables\Actions\ViewAction;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
@@ -145,11 +145,11 @@ class ServicePricingResource extends Resource
             ])
             ->actions([
                 EditAction::make(),
-                DeleteAction::make(),
+                // Delete action disabled as per panelist requirement
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    // Delete actions disabled as per panelist requirement
                 ]),
             ])
             ->defaultSort('service.name', 'asc');

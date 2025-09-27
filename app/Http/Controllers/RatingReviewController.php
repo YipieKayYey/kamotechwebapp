@@ -30,18 +30,18 @@ class RatingReviewController extends Controller
     public function getBookingForReview($bookingId)
     {
         $user = Auth::user();
-        
-        if (!$user || $user->role !== 'customer') {
+
+        if (! $user || $user->role !== 'customer') {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $booking = Booking::where('customer_id', $user->id)
             ->where('id', $bookingId)
             ->where('status', 'completed')
-            ->with(['service', 'airconType', 'technician.user', 'timeslot', 'review'])
+            ->with(['service', 'airconType', 'technician.user', 'review'])
             ->first();
 
-        if (!$booking) {
+        if (! $booking) {
             return response()->json(['error' => 'Booking not found or not eligible for review'], 404);
         }
 
@@ -62,8 +62,8 @@ class RatingReviewController extends Controller
             ],
             'number_of_units' => $booking->number_of_units,
             'ac_brand' => $booking->ac_brand,
-            'scheduled_date' => $booking->scheduled_date->format('M d, Y'),
-            'timeslot' => $booking->timeslot->time_range,
+            'scheduled_start_at' => optional($booking->scheduled_start_at)->format('M d, Y g:i A'),
+            'scheduled_end_at' => optional($booking->scheduled_end_at)->format('M d, Y g:i A'),
             'total_amount' => $booking->total_amount,
             'technician' => [
                 'name' => $booking->technician->user->name,
@@ -81,8 +81,8 @@ class RatingReviewController extends Controller
     public function submitReview(Request $request, $bookingId)
     {
         $user = Auth::user();
-        
-        if (!$user || $user->role !== 'customer') {
+
+        if (! $user || $user->role !== 'customer') {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -101,7 +101,7 @@ class RatingReviewController extends Controller
             ->with('review')
             ->first();
 
-        if (!$booking) {
+        if (! $booking) {
             return response()->json(['error' => 'Booking not found or not eligible for review'], 404);
         }
 
@@ -155,6 +155,7 @@ class RatingReviewController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json(['error' => 'Failed to submit review'], 500);
         }
     }
@@ -165,8 +166,8 @@ class RatingReviewController extends Controller
     public function getCustomerReviews(Request $request)
     {
         $user = Auth::user();
-        
-        if (!$user || $user->role !== 'customer') {
+
+        if (! $user || $user->role !== 'customer') {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -201,13 +202,99 @@ class RatingReviewController extends Controller
     }
 
     /**
+     * Get all approved reviews for public reviews page
+     */
+    public function getPublicReviews()
+    {
+        $reviews = RatingReview::approved()
+            ->with([
+                'customer:id,name',
+                'technician.user:id,name',
+                'service:id,name',
+                'booking:id,city_municipality,barangay,created_at',
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $formattedReviews = $reviews->map(function ($review) {
+            // Get location from booking
+            $location = null;
+            if ($review->booking) {
+                $city = $review->booking->city_municipality ?? null;
+                if ($city) {
+                    $location = $city;
+                }
+            }
+
+            return [
+                'id' => $review->id,
+                'rating' => (int) round($review->overall_rating),
+                'text' => $review->review ?? '',
+                'author' => $review->customer->name ?? 'Anonymous',
+                'avatar' => strtoupper(substr($review->customer->name ?? 'A', 0, 1)),
+                'service' => $review->service->name ?? 'Service',
+                'technician' => $review->technician->user->name ?? 'Technician',
+                'date' => $review->created_at->format('Y-m-d'),
+                'location' => $location ?? 'Bataan',
+            ];
+        });
+
+        // Calculate statistics
+        $totalReviews = $formattedReviews->count();
+        $averageRating = $totalReviews > 0
+            ? $reviews->avg('overall_rating')
+            : 0;
+        $fiveStarCount = $reviews->where('overall_rating', '>=', 4.5)->count();
+        $fourStarCount = $reviews->where('overall_rating', '>=', 3.5)
+            ->where('overall_rating', '<', 4.5)->count();
+
+        return [
+            'reviews' => $formattedReviews,
+            'stats' => [
+                'totalReviews' => $totalReviews,
+                'averageRating' => round($averageRating, 1),
+                'fiveStarCount' => $fiveStarCount,
+                'fourStarCount' => $fourStarCount,
+            ],
+        ];
+    }
+
+    /**
+     * Get latest reviews for homepage
+     */
+    public function getLatestReviews($limit = 3)
+    {
+        $reviews = RatingReview::approved()
+            ->with([
+                'customer:id,name',
+                'technician.user:id,name',
+                'service:id,name',
+            ])
+            ->orderBy('created_at', 'desc')
+            ->limit($limit)
+            ->get();
+
+        return $reviews->map(function ($review) {
+            return [
+                'id' => $review->id,
+                'rating' => (int) round($review->overall_rating),
+                'text' => $review->review ?? '',
+                'author' => $review->customer->name ?? 'Anonymous',
+                'avatar' => strtoupper(substr($review->customer->name ?? 'A', 0, 1)),
+                'service' => $review->service->name ?? 'Service',
+                'technician' => $review->technician->user->name ?? 'Technician',
+            ];
+        });
+    }
+
+    /**
      * Get review details
      */
     public function getReviewDetails($reviewId)
     {
         $user = Auth::user();
-        
-        if (!$user || $user->role !== 'customer') {
+
+        if (! $user || $user->role !== 'customer') {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -216,7 +303,7 @@ class RatingReviewController extends Controller
             ->with(['booking.service', 'booking.airconType', 'technician.user', 'categoryScores.category'])
             ->first();
 
-        if (!$review) {
+        if (! $review) {
             return response()->json(['error' => 'Review not found'], 404);
         }
 
@@ -227,7 +314,7 @@ class RatingReviewController extends Controller
                 'booking_number' => $review->booking->booking_number,
                 'service' => $review->booking->service->name,
                 'aircon_type' => $review->booking->airconType->name,
-                'scheduled_date' => $review->booking->scheduled_date->format('M d, Y'),
+                'scheduled_start_at' => optional($review->booking->scheduled_start_at)->format('M d, Y g:i A'),
                 'total_amount' => $review->booking->total_amount,
             ],
             'technician' => [

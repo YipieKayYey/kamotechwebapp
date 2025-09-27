@@ -282,9 +282,34 @@
 }
 
 .contact-map-container {
-    width: 85%;
-    max-width: 400px;
+    width: 100%;
+    max-width: 600px;
     margin: 0 auto;
+}
+
+/* Interactive Map Styles */
+.contact-map-container .leaflet-container {
+    border-radius: var(--radius-md);
+    height: 400px !important;
+}
+
+.contact-map-popup {
+    text-align: center;
+}
+
+.contact-map-popup h4 {
+    margin: 0 0 0.5rem 0;
+    color: #1f2937;
+}
+
+.contact-map-popup p {
+    margin: 0;
+    color: #6b7280;
+}
+
+.contact-map-overlay-text {
+    font-weight: 600;
+    font-size: 0.875rem;
 }
 
 .contact-map-wrapper {

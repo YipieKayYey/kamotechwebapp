@@ -16,9 +16,9 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->string('employee_id')->unique();
             $table->date('hire_date');
-            $table->decimal('commission_rate', 5, 2)->default(15.00); // percentage
+            $table->decimal('commission_rate', 5, 2)->default(10.00); // percentage
             $table->boolean('is_available')->default(true);
-            $table->decimal('rating_average', 3, 2)->default(5.00);
+            $table->decimal('rating_average', 3, 2)->default(0.00);
             $table->integer('total_jobs')->default(0);
             $table->integer('current_jobs')->default(0);
             $table->integer('max_daily_jobs')->default(5);

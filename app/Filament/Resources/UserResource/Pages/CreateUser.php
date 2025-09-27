@@ -9,4 +9,12 @@ use Filament\Resources\Pages\CreateRecord;
 class CreateUser extends CreateRecord
 {
     protected static string $resource = UserResource::class;
+
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        // Automatically set email as verified when creating user through admin
+        $data['email_verified_at'] = now();
+
+        return $data;
+    }
 }

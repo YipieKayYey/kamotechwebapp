@@ -7,7 +7,6 @@ use App\Models\Booking;
 use App\Models\Service;
 use App\Models\ServicePricing;
 use App\Models\Technician;
-use App\Models\Timeslot;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
@@ -24,13 +23,12 @@ class BookingSeeder extends Seeder
         $services = Service::all();
 
         $technicians = Technician::all();
-        $timeslots = Timeslot::all();
         $airconTypes = AirconType::all();
         $adminUser = User::where('role', 'admin')->first();
 
         if ($customers->isEmpty() || $services->isEmpty() ||
-            $technicians->isEmpty() || $timeslots->isEmpty() || $airconTypes->isEmpty()) {
-            throw new \Exception('Missing required data. Make sure Users, Services, Technicians, Timeslots, and AirconTypes are seeded first.');
+            $technicians->isEmpty() || $airconTypes->isEmpty()) {
+            throw new \Exception('Missing required data. Make sure Users, Services, Technicians, and AirconTypes are seeded first.');
         }
 
         echo "Creating enhanced bookings with:\n";
@@ -38,7 +36,6 @@ class BookingSeeder extends Seeder
         echo "- {$services->count()} services\n";
 
         echo "- {$technicians->count()} technicians\n";
-        echo "- {$timeslots->count()} timeslots\n";
         echo "- {$airconTypes->count()} aircon types\n";
         echo "\n🎯 Booking Distribution for Algorithm Testing:\n";
         echo "- Recent bookings: 15 (testing current algorithm)\n";
@@ -52,20 +49,20 @@ class BookingSeeder extends Seeder
 
         // 1. Recent single-day bookings (15 bookings, last 2 weeks)
         for ($i = 1; $i <= 12; $i++) {
-            $bookings[] = $this->createSingleDayBooking($i, $customers, $services, $technicians, $timeslots, $airconTypes, $adminUser, 'recent');
+            $bookings[] = $this->createSingleDayBooking($i, $customers, $services, $technicians, $airconTypes, $adminUser, 'recent');
         }
 
         // 2. Multi-day bookings for testing (3 bookings, recent)
         for ($i = 13; $i <= 15; $i++) {
-            $bookings[] = $this->createMultiDayBooking($i, $customers, $services, $technicians, $timeslots, $airconTypes, $adminUser, 'recent');
+            $bookings[] = $this->createMultiDayBooking($i, $customers, $services, $technicians, $airconTypes, $adminUser, 'recent');
         }
 
         // 3. Historical bookings (50 bookings, past 6 months)
         for ($i = 16; $i <= 65; $i++) {
             if (rand(1, 10) <= 8) { // 80% single-day
-                $bookings[] = $this->createSingleDayBooking($i, $customers, $services, $technicians, $timeslots, $airconTypes, $adminUser, 'historical');
+                $bookings[] = $this->createSingleDayBooking($i, $customers, $services, $technicians, $airconTypes, $adminUser, 'historical');
             } else { // 20% multi-day
-                $bookings[] = $this->createMultiDayBooking($i, $customers, $services, $technicians, $timeslots, $airconTypes, $adminUser, 'historical');
+                $bookings[] = $this->createMultiDayBooking($i, $customers, $services, $technicians, $airconTypes, $adminUser, 'historical');
             }
         }
 
@@ -84,7 +81,7 @@ class BookingSeeder extends Seeder
         echo "🏷️ AC brands: Mixed (including 'Unknown')\n\n";
     }
 
-    private function createSingleDayBooking($index, $customers, $services, $technicians, $timeslots, $airconTypes, $adminUser, $period)
+    private function createSingleDayBooking($index, $customers, $services, $technicians, $airconTypes, $adminUser, $period)
     {
         $customer = $customers->random();
         $service = $services->random();
@@ -92,7 +89,6 @@ class BookingSeeder extends Seeder
         // Assign technician based on service expertise (weighted selection)
         $technician = $this->selectTechnicianForService($service->name, $technicians);
 
-        $timeslot = $timeslots->random();
         $airconType = $airconTypes->random();
 
         // Number of AC units (mostly 1-3 for residential)
@@ -107,9 +103,17 @@ class BookingSeeder extends Seeder
             ? Carbon::now()->subDays(rand(1, 14))
             : Carbon::now()->subDays(rand(15, 180));
 
+        // Choose an allowed start hour (08,09,10,11,13,14,15,16)
+        $allowedHours = [8, 9, 10, 11, 13, 14, 15, 16];
+        $startHour = $allowedHours[array_rand($allowedHours)];
+        $paddingMinutes = 0; // planning uses service prep, no technician buffer
+        [$startAt, $endAt] = $this->planSchedule($scheduledDate->copy()->setTime($startHour, 0), $durationData['total_minutes'], $paddingMinutes);
+
         $status = $period === 'recent'
             ? $this->getRecentBookingStatus($scheduledDate)
             : $this->getHistoricalBookingStatus();
+
+        $creatorId = $adminUser?->id ?? $customer->id;
 
         return [
             'booking_number' => 'KMT-'.str_pad($index, 6, '0', STR_PAD_LEFT),
@@ -119,11 +123,11 @@ class BookingSeeder extends Seeder
             'number_of_units' => $numberOfUnits,
             'ac_brand' => $this->getRandomAcBrand(),
             'technician_id' => $technician->id,
-            'scheduled_date' => $scheduledDate->format('Y-m-d'),
-            'scheduled_end_date' => $scheduledDate->format('Y-m-d'), // Same day
-            'timeslot_id' => $timeslot->id,
+            'scheduled_start_at' => $startAt,
+            'scheduled_end_at' => $endAt,
+            // removed: technician padding
             'estimated_duration_minutes' => $durationData['total_minutes'],
-            'estimated_days' => 1,
+            // removed column; compute when needed from start/end
             'status' => $status,
             'total_amount' => $pricingData['total_amount'],
             'payment_status' => $status === 'completed' ? 'paid' : ($status === 'cancelled' ? 'unpaid' : 'pending'),
@@ -135,17 +139,16 @@ class BookingSeeder extends Seeder
             'customer_mobile' => '+63 917 '.str_pad(rand(1000000, 9999999), 7, '0', STR_PAD_LEFT),
             'nearest_landmark' => collect(['Near SM Mall', 'Opposite Jollibee', 'Behind Gas Station', 'Near Church', 'Beside School', null])->random(),
             'special_instructions' => $this->getRandomInstructions(),
-            'created_by' => rand(0, 1) ? $customer->id : $adminUser->id,
+            'created_by' => rand(0, 1) ? $customer->id : $creatorId,
             'created_at' => $scheduledDate->copy()->subDays(rand(1, 3)),
             'updated_at' => $scheduledDate->copy()->addDays(rand(0, 2)),
         ];
     }
 
-    private function createMultiDayBooking($index, $customers, $services, $technicians, $timeslots, $airconTypes, $adminUser, $period)
+    private function createMultiDayBooking($index, $customers, $services, $technicians, $airconTypes, $adminUser, $period)
     {
         $customer = $customers->random();
         $technician = $technicians->random();
-        $timeslot = $timeslots->random();
         $airconType = $airconTypes->random();
 
         // Multi-day bookings are typically installations or large commercial jobs
@@ -164,11 +167,16 @@ class BookingSeeder extends Seeder
             ? Carbon::now()->subDays(rand(1, 14))
             : Carbon::now()->subDays(rand(15, 180));
 
-        $scheduledEndDate = $scheduledDate->copy()->addDays($estimatedDays - 1);
+        // Multi-day: start at 08:00, let planner split over days
+        $startAtCandidate = $scheduledDate->copy()->setTime(8, 0);
+        $paddingMinutes = 0;
+        [$startAt, $endAt] = $this->planSchedule($startAtCandidate, $durationData['total_minutes'], $paddingMinutes);
 
         $status = $period === 'recent'
             ? $this->getRecentBookingStatus($scheduledDate)
             : $this->getHistoricalBookingStatus();
+
+        $creatorId = $adminUser?->id ?? $customer->id;
 
         return [
             'booking_number' => 'KMT-'.str_pad($index, 6, '0', STR_PAD_LEFT),
@@ -179,12 +187,11 @@ class BookingSeeder extends Seeder
             'number_of_units' => $numberOfUnits,
             'ac_brand' => rand(0, 1) ? $this->getRandomAcBrand() : 'Multiple Brands',
             'technician_id' => $technician->id,
-
-            'scheduled_date' => $scheduledDate->format('Y-m-d'),
-            'scheduled_end_date' => $scheduledEndDate->format('Y-m-d'),
-            'timeslot_id' => $timeslot->id,
+            'scheduled_start_at' => $startAt,
+            'scheduled_end_at' => $endAt,
+            // removed: booking_padding_minutes column
             'estimated_duration_minutes' => $durationData['total_minutes'],
-            'estimated_days' => $estimatedDays,
+            // removed column; compute when needed from start/end
             'status' => $status,
             'total_amount' => $pricingData['total_amount'],
             'payment_status' => $status === 'completed' ? 'paid' : ($status === 'cancelled' ? 'unpaid' : 'pending'),
@@ -196,10 +203,105 @@ class BookingSeeder extends Seeder
             'customer_mobile' => '+63 917 '.str_pad(rand(1000000, 9999999), 7, '0', STR_PAD_LEFT),
             'nearest_landmark' => collect(['Near Business District', 'Beside Factory', 'Main Commercial Area', 'Industrial Park', null])->random(),
             'special_instructions' => $this->getMultiDayInstructions(),
-            'created_by' => rand(0, 1) ? $customer->id : $adminUser->id,
+            'created_by' => rand(0, 1) ? $customer->id : $creatorId,
             'created_at' => $scheduledDate->copy()->subDays(rand(3, 7)),
             'updated_at' => $scheduledDate->copy()->addDays(rand(0, $estimatedDays)),
         ];
+    }
+
+    /**
+     * Plan a schedule across business hours (08-12, 13-17), skipping lunch, with end padding.
+     * Returns [scheduled_start_at, scheduled_end_at] ISO strings.
+     */
+    private function planSchedule(Carbon $startAt, int $workMinutes, int $paddingMinutes = 0): array
+    {
+        // Align start to business window: if in lunch, jump to 13:00; if before 08:00, set to 08:00; if after 17:00, next day 08:00
+        $startAt = $this->normalizeStart($startAt);
+
+        $current = $startAt->copy();
+        $remaining = $workMinutes;
+        $safetyHops = 0;
+
+        while ($remaining > 0) {
+            // Determine available minutes in current window
+            [$winStart, $winEnd] = $this->currentWindow($current);
+            if ($current->lt($winStart)) {
+                $current = $winStart->copy();
+            }
+            // Minutes available until window end from current time
+            $available = max(0, $current->diffInMinutes($winEnd, false));
+            if ($available <= 0) {
+                // Move to next window
+                $current = $this->nextWindowStart($current);
+                if (++$safetyHops > 1000) {
+                    break;
+                }
+
+                continue;
+            }
+            $consume = min($remaining, $available);
+            $current->addMinutes($consume);
+            $remaining -= $consume;
+            if ($remaining > 0) {
+                // Jump to next window start
+                $current = $this->nextWindowStart($current);
+                if (++$safetyHops > 1000) {
+                    break;
+                }
+            }
+        }
+
+        // Apply end padding
+        $endWithPadding = $current->copy()->addMinutes($paddingMinutes);
+
+        return [
+            $startAt->format('Y-m-d H:i:s'),
+            $endWithPadding->format('Y-m-d H:i:s'),
+        ];
+    }
+
+    private function normalizeStart(Carbon $dt): Carbon
+    {
+        $h = (int) $dt->format('H');
+        $m = (int) $dt->format('i');
+        // Before 08:00 → set to 08:00
+        if ($dt->lt($dt->copy()->setTime(8, 0))) {
+            return $dt->copy()->setTime(8, 0);
+        }
+        // Lunch 12:00–13:00 → set to 13:00
+        if ($dt->gte($dt->copy()->setTime(12, 0)) && $dt->lt($dt->copy()->setTime(13, 0))) {
+            return $dt->copy()->setTime(13, 0);
+        }
+        // After 17:00 → next day 08:00
+        if ($dt->gte($dt->copy()->setTime(17, 0))) {
+            return $dt->copy()->addDay()->setTime(8, 0);
+        }
+
+        return $dt;
+    }
+
+    private function currentWindow(Carbon $dt): array
+    {
+        $morningStart = $dt->copy()->setTime(8, 0);
+        $morningEnd = $dt->copy()->setTime(12, 0);
+        $afternoonStart = $dt->copy()->setTime(13, 0);
+        $afternoonEnd = $dt->copy()->setTime(17, 0);
+
+        if ($dt->lt($morningEnd)) {
+            return [$morningStart, $morningEnd];
+        }
+
+        return [$afternoonStart, $afternoonEnd];
+    }
+
+    private function nextWindowStart(Carbon $dt): Carbon
+    {
+        // If we are at/before lunch (<= 12:00), next is 13:00 same day; else next day 08:00
+        if ($dt->lte($dt->copy()->setTime(12, 0))) {
+            return $dt->copy()->setTime(13, 0);
+        }
+
+        return $dt->copy()->addDay()->setTime(8, 0);
     }
 
     private function getRealisticUnitCount(): int
@@ -328,82 +430,82 @@ class BookingSeeder extends Seeder
      */
     private function selectTechnicianForService($serviceName, $technicians)
     {
-        // Define technician expertise weights for each service
+        // Map technicians by employee_id to ensure consistency
+        $techniciansByEmployee = $technicians->keyBy('employee_id');
+
+        // Define technician expertise weights by employee_id for reliability
         $technicianWeights = [
             'AC Cleaning' => [
-                1 => 45, // Pedro - Cleaning Expert
-                2 => 15, // Maria
-                3 => 10, // Jose
-                4 => 25, // Ana - Good at everything
-                5 => 5,  // Carlos
+                'KMT-001' => 45, // Pedro - Cleaning Expert
+                'KMT-002' => 15, // Jonathan
+                'KMT-003' => 10, // Jose
+                'KMT-004' => 25, // John Carl - Good at everything
+                'KMT-005' => 5,  // Carlos
             ],
             'AC Maintenance' => [
-                1 => 40, // Pedro - Maintenance Expert
-                2 => 15, // Maria
-                3 => 15, // Jose
-                4 => 25, // Ana
-                5 => 5,  // Carlos
+                'KMT-001' => 40, // Pedro - Maintenance Expert
+                'KMT-002' => 15, // Jonathan
+                'KMT-003' => 15, // Jose
+                'KMT-004' => 25, // John Carl
+                'KMT-005' => 5,  // Carlos
             ],
             'AC Installation' => [
-                1 => 5,  // Pedro - Weak at installation
-                2 => 50, // Maria - Installation Expert
-                3 => 10, // Jose
-                4 => 25, // Ana
-                5 => 10, // Carlos
+                'KMT-001' => 5,  // Pedro - Weak at installation
+                'KMT-002' => 50, // Jonathan - Installation Expert
+                'KMT-003' => 10, // Jose
+                'KMT-004' => 25, // John Carl
+                'KMT-005' => 10, // Carlos
             ],
             'AC Relocation' => [
-                1 => 5,  // Pedro
-                2 => 45, // Maria - Installation/Relocation Expert
-                3 => 15, // Jose
-                4 => 25, // Ana
-                5 => 10, // Carlos
+                'KMT-001' => 5,  // Pedro
+                'KMT-002' => 45, // Jonathan - Installation/Relocation Expert
+                'KMT-003' => 15, // Jose
+                'KMT-004' => 25, // John Carl
+                'KMT-005' => 10, // Carlos
             ],
             'AC Repair' => [
-                1 => 10, // Pedro
-                2 => 15, // Maria
-                3 => 45, // Jose - Repair Expert
-                4 => 25, // Ana
-                5 => 5,  // Carlos
+                'KMT-001' => 10, // Pedro
+                'KMT-002' => 15, // Jonathan
+                'KMT-003' => 45, // Jose - Repair Expert
+                'KMT-004' => 25, // John Carl
+                'KMT-005' => 5,  // Carlos
             ],
             'Freon Charging' => [
-                1 => 8,  // Pedro
-                2 => 12, // Maria
-                3 => 25, // Jose - Good with freon
-                4 => 20, // Ana
-                5 => 35, // Carlos - Freon Expert
+                'KMT-001' => 8,  // Pedro
+                'KMT-002' => 12, // Jonathan
+                'KMT-003' => 25, // Jose - Good with freon
+                'KMT-004' => 20, // John Carl
+                'KMT-005' => 35, // Carlos - Freon Expert
             ],
             'AC Troubleshooting' => [
-                1 => 15, // Pedro
-                2 => 10, // Maria - Weak at diagnosis
-                3 => 5,  // Jose - Weak at diagnosis
-                4 => 60, // Ana - Diagnostic Expert
-                5 => 10, // Carlos
+                'KMT-001' => 15, // Pedro
+                'KMT-002' => 10, // Jonathan - Weak at diagnosis
+                'KMT-003' => 5,  // Jose - Weak at diagnosis
+                'KMT-004' => 60, // John Carl - Diagnostic Expert
+                'KMT-005' => 10, // Carlos
             ],
             'Repiping Service' => [
-                1 => 8,  // Pedro
-                2 => 15, // Maria
-                3 => 40, // Jose - Repiping Expert
-                4 => 25, // Ana
-                5 => 12, // Carlos
+                'KMT-001' => 8,  // Pedro
+                'KMT-002' => 15, // Jonathan
+                'KMT-003' => 40, // Jose - Repiping Expert
+                'KMT-004' => 25, // John Carl
+                'KMT-005' => 12, // Carlos
             ],
         ];
 
         // Get weights for this service or use balanced weights
         $weights = $technicianWeights[$serviceName] ?? [
-            1 => 20, 2 => 20, 3 => 20, 4 => 20, 5 => 20,
+            'KMT-001' => 20, 'KMT-002' => 20, 'KMT-003' => 20, 'KMT-004' => 20, 'KMT-005' => 20,
         ];
-
-        // Convert technician collection to array indexed by ID
-        $techniciansArray = $technicians->keyBy('id');
 
         // Weighted random selection
         $totalWeight = array_sum($weights);
         $random = rand(1, $totalWeight);
 
-        foreach ($weights as $technicianId => $weight) {
+        foreach ($weights as $employeeId => $weight) {
             $random -= $weight;
-            if ($random <= 0 && $techniciansArray->has($technicianId)) {
-                return $techniciansArray->get($technicianId);
+            if ($random <= 0 && $techniciansByEmployee->has($employeeId)) {
+                return $techniciansByEmployee->get($employeeId);
             }
         }
 

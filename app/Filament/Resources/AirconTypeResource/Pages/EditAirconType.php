@@ -14,7 +14,7 @@ class EditAirconType extends EditRecord
     {
         return [
             Actions\ViewAction::make(),
-            Actions\DeleteAction::make(),
+            // Delete action disabled as per panelist requirement
         ];
     }
 }
